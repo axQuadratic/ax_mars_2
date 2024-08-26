@@ -27,7 +27,7 @@ def main():
     root.mainloop()
 
 def update_tile_field(tile_count : int):
-    global displayed_image, canvas, runs, pil_image, tile_colors, prev_tile_colors, side
+    global displayed_image, canvas, runs, pil_image, tile_colors, prev_tile_colors, side, pixel
 
     runs += 1
     start_time = dt.datetime.now().timestamp()
@@ -50,7 +50,7 @@ def update_tile_field(tile_count : int):
     for y in range(side):
         for x in range(side):
             if tile_colors[sim_tile_count] != prev_tile_colors[sim_tile_count]:
-                pixel = place_tile(pixel, x * o.tile_size, y * o.tile_size, tile_colors[sim_tile_count])
+                pixel = place_tile(pixel, x * o.tile_size, y * o.tile_size, tile_colors[sim_tile_count], False)
                 updated_tile_count += 1
             sim_tile_count += 1
 
@@ -75,18 +75,25 @@ def update_tile_field(tile_count : int):
     os.system("cls")
     print(f"Simulation complete.\nSimulated tiles: {tile_count} ({updated_tile_count} updated)\nElapsed time: {elapsed_time} seconds\nCurrent runs: {runs}")
     
-    update_tile_field(tile_count)
+    #update_tile_field(tile_count)
 
-def place_tile(data, x : int, y : int, color : str):
+def place_tile(data, x : int, y : int, color : str, selected : bool):
     for i in range(o.tile_size):
         for j in range(o.tile_size):
-            data[j + x, i + y] = o.tiles[color][o.tile_size * i + j]
+            data[j + x, i + y] = (o.tiles[color] if not selected else o.sel_tiles[color])[o.tile_size * i + j]
 
     return data
 
 def open_detail_window(event):
     tile_x = math.ceil(event.x / o.tile_size * (pil_image.width / canvas.winfo_width()))
     tile_y = math.ceil(event.y / o.tile_size * (pil_image.height / canvas.winfo_height()))
-    print(f"Click at {event.x}, {event.y}\nViewing tile {tile_x}, {tile_y} (index {side * (tile_y - 1) + tile_x})")
+    tile_index = side * (tile_y - 1) + tile_x
+
+    print(f"Click at {event.x}, {event.y}\nViewing tile {tile_x}, {tile_y} (index {tile_index})")
+
+    place_tile(pixel, tile_x * o.tile_size, tile_y * o.tile_size, tile_colors[tile_index], True)
+
+    update_tile_field(8000)
+
 
 main()
