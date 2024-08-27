@@ -6,6 +6,7 @@ import math
 
 tile_size = 20
 border_width = 1
+max_field_width = 100
 
 tiles = {}
 
@@ -81,15 +82,21 @@ def pregenerate_tile(tile_size, border_width, fill_color, cross):
 
 # The main graphics handler
 def create_image_from_state_data(state : list, prev_state : list, field_size : int, prev_image : Image):
-    side = math.ceil(math.sqrt(field_size))
-    new_image = Image.new("RGB", (side * tile_size, side * tile_size)) if prev_image is None else prev_image
+    # In cases of very large cores, more tiles are fit into each row to prevent excessively large windows
+    if field_size > 10000:
+        a_max_field_width = math.ceil(math.sqrt(field_size))
+    else:
+        a_max_field_width = max_field_width
+
+    row_count = math.ceil(field_size / a_max_field_width)
+    new_image = Image.new("RGB", (a_max_field_width * tile_size, row_count * tile_size)) if prev_image is None else prev_image
     if state == [] or state == prev_state: return new_image # No core is initialized or core is unchanged from previous iteration
 
     # Draw the image by placing pregenerated tiles as needed
     img_data = new_image.load()
     current_tile = 0
-    for y in range(side):
-        for x in range(side):
+    for y in range(row_count):
+        for x in range(a_max_field_width):
             if prev_state == []:
                 # If no core was previously loaded, it must obviously be created from scratch
                 img_data = draw_tile(img_data, x * tile_size, y * tile_size, state[current_tile])
@@ -102,6 +109,7 @@ def create_image_from_state_data(state : list, prev_state : list, field_size : i
         # Clever way to break out of nested loops all at once; see http://psung.blogspot.com/2007/12/for-else-in-python.html
         else: continue
         break
+
 
     return new_image
 
