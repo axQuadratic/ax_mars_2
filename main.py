@@ -1,11 +1,13 @@
 import customtkinter as ctk
+import math
 from PIL import Image, ImageTk
+from ctypes import windll
 import graphics
 
 # Global variables are declared here
 play_speed = 0
-field_size = 20000
-state_data = ["black_tile" for i in range(20000)]
+field_size = 8000
+state_data = ["red_tile" for i in range(20000)]
 prev_state_data = []
 state_image = None
 
@@ -28,12 +30,12 @@ def main():
     state_window_button.pack(anchor=ctk.CENTER)
 
 def open_state_window():
-    global state_window, state_canvas
+    global state_window, state_canvas, tile_detail, inst_detail, cycle_detail
 
     state_window_button.configure(state=ctk.DISABLED, text="Core Readout Active")
 
     state_window = ctk.CTkToplevel(root)
-    #state_window.resizable(False, False) # Consider making this resizable in the future; right now resizing it would break everything
+    state_window.resizable(False, False) # Consider making this resizable in the future; right now resizing it would break everything
     state_window.title("Core Readout")
     state_window.protocol("WM_DELETE_WINDOW", close_state_win) # Intercepts a press of the OS close button
 
@@ -43,7 +45,7 @@ def open_state_window():
 
     state_canvas = ctk.CTkCanvas(state_window, bg="black")
     state_canvas.grid(row=0, column=0, columnspan=2, sticky="nsew")
-    state_canvas.bind("<1>", open_detail_window)
+    state_canvas.bind("<Motion>", track_mouse_pos)
     
     bottom_bar_container = ctk.CTkFrame(state_window, width=0, height=0)
     bottom_bar_container.grid(row=1, column=0, sticky="nsew")
@@ -53,13 +55,13 @@ def open_state_window():
     bottom_bar_container.grid_columnconfigure([1, 3], weight=1)
     bottom_bar_container.grid_columnconfigure(5, weight=20)
 
-    tile_detail = ctk.CTkLabel(bottom_bar_container, bg_color="gray", text="Address #XXXX")
+    tile_detail = ctk.CTkLabel(bottom_bar_container, bg_color="gray", text="Address #0000")
     tile_detail.grid(row=0, column=0, sticky="nsew")
-    write_detail = ctk.CTkLabel(bottom_bar_container, bg_color="gray", text="DAT.F #0, #0")
-    write_detail.grid(row=0, column=2, sticky="nsew")
-    tile_detail = ctk.CTkLabel(bottom_bar_container, bg_color="gray", text="Last read by:\nNone")
-    tile_detail.grid(row=0, column=4, sticky="nsew")
-    ctk.CTkButton(bottom_bar_container, command=lambda: open_detail_window(None), text="Open Detail Viewer").grid(row=0, column=6, sticky="nsew")
+    inst_detail = ctk.CTkLabel(bottom_bar_container, bg_color="gray", text="DAT.F #0, #0")
+    inst_detail.grid(row=0, column=2, sticky="nsew")
+    cycle_detail = ctk.CTkLabel(bottom_bar_container, bg_color="gray", text="Cycle 0 / 10000")
+    cycle_detail.grid(row=0, column=4, sticky="nsew")
+    ctk.CTkButton(bottom_bar_container, command=open_detail_window, text="Open Detail Viewer").grid(row=0, column=6, sticky="nsew")
 
     update_state_canvas()
 
@@ -71,11 +73,19 @@ def update_state_canvas():
     root.display_image = display_image = ImageTk.PhotoImage(state_image)
     state_canvas.create_image((405, state_image.height // 2 + 5), image=display_image)
 
-    # Recalculate window size based on the size of the image; 40px margin for the border and bottom bar
-    state_window.geometry(f"810x{state_image.height + 40}")
+    # The next step breaks if the Windows scaling setting is above 100%, hence that needs to be checked for
+    scale_factor = windll.shcore.GetScaleFactorForDevice(0) / 100
 
-def open_detail_window(event):
-    print("Detail window opened via click in canvas")
+    # Recalculate window size based on the size of the image; 40px margin for the border and bottom bar
+    state_window.geometry(f"{round(810 / scale_factor)}x{round(state_image.height / scale_factor) + 40}")
+
+def track_mouse_pos(event):
+    tile_x = math.floor((event.x / state_image.width) * 100)
+    tile_y = math.floor((event.y / state_image.width) * 100)
+    tile_detail.configure(text=f"Address #{tile_y * graphics.max_field_width + tile_x}")
+
+def open_detail_window():
+    pass
 
 def close_state_win():
     state_window_button.configure(state=ctk.NORMAL, text="View Core")
