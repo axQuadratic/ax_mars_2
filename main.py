@@ -80,9 +80,19 @@ def update_state_canvas():
     state_window.geometry(f"{round(810 / scale_factor)}x{round(state_image.height / scale_factor) + 40}")
 
 def track_mouse_pos(event):
-    tile_x = math.floor((event.x / state_image.width) * 100)
-    tile_y = math.floor((event.y / state_image.width) * 100)
-    tile_detail.configure(text=f"Address #{tile_y * graphics.max_field_width + tile_x}")
+    # Calculate mouse position in terms of tiles; note that since the grid is shifted by 5 all events must also be
+    tile_x = math.floor(((event.x + 5) / state_image.width) * 100)
+    tile_y = math.floor(((event.y + 5) / state_image.width) * 100)
+    
+    # Clamp X and Y values
+    if tile_x <= 1: tile_x = 1
+    if tile_x > graphics.max_field_width: tile_x = graphics.max_field_width
+    if tile_y <= 1: tile_y = 1
+    if tile_y > field_size / graphics.max_field_width: tile_y = field_size / graphics.max_field_width
+
+    #tile = 
+
+    tile_detail.configure(text=f"Address #{((tile_y - 1) * graphics.max_field_width + tile_x):04}")
 
 def open_detail_window():
     pass
