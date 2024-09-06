@@ -1,11 +1,13 @@
 import customtkinter as ctk
 import math
-from PIL import Image, ImageTk
+from PIL import ImageTk
 from ctypes import windll
 import graphics
+import objects
 
 # Global variables are declared here
-play_speed = 0
+play_speed = 1
+tick_speed = 1
 field_size = 8000
 state_data = ["red_tile" for i in range(20000)]
 prev_state_data = []
@@ -20,14 +22,29 @@ root.resizable(False, False)
 root.title("axMARS 2.0")
 
 def main():
-    global pause_button, speed_control, state_window_button
+    global pause_button, speed_display, state_window_button
 
     # Create UI elements for the main window
     pause_button = ctk.CTkButton(root)
-    speed_control = ctk.CTkSlider(root, from_=0, to=10, orientation=ctk.HORIZONTAL)
+    speed_control = ctk.CTkSlider(root, from_=0, to=10, number_of_steps=10, orientation=ctk.HORIZONTAL, command=change_speed)
+    speed_display = ctk.CTkLabel(root, text=" 1x")
     state_window_button = ctk.CTkButton(root, text="View Core", command=open_state_window)
 
-    state_window_button.pack(anchor=ctk.CENTER)
+    state_window_button.grid(row=2, column=0)
+    speed_control.grid(row=4, column=0)
+    speed_display.grid(row=4, column=1)
+
+    speed_control.set(0)
+
+def change_speed(new_speed):
+    global play_speed
+
+    play_speed = objects.speed_levels[math.floor(new_speed)]
+    if play_speed == "MAX":
+        speed_display.configure(text=f"MAX")
+        return
+        
+    speed_display.configure(text=f" {play_speed}x")
 
 def open_state_window():
     global state_window, state_canvas, tile_detail, inst_detail, cycle_detail
@@ -61,7 +78,7 @@ def open_state_window():
     inst_detail.grid(row=0, column=2, sticky="nsew")
     cycle_detail = ctk.CTkLabel(bottom_bar_container, bg_color="gray", text="Cycle 0 / 10000")
     cycle_detail.grid(row=0, column=4, sticky="nsew")
-    ctk.CTkButton(bottom_bar_container, command=open_detail_window, text="Open Detail Viewer").grid(row=0, column=6, sticky="nsew")
+    ctk.CTkButton(bottom_bar_container, command=lambda: open_detail_window(0), text="Open Detail Viewer").grid(row=0, column=6, sticky="nsew")
 
     update_state_canvas()
 
@@ -80,6 +97,8 @@ def update_state_canvas():
     state_window.geometry(f"{round(810 / scale_factor)}x{round(state_image.height / scale_factor) + 40}")
 
 def track_mouse_pos(event):
+    global target_tile
+
     # Calculate mouse position in terms of tiles; note that since the grid is shifted by 5 all events must also be
     tile_x = math.floor(((event.x + 5) / state_image.width) * 100)
     tile_y = math.floor(((event.y + 5) / state_image.width) * 100)
@@ -90,12 +109,12 @@ def track_mouse_pos(event):
     if tile_y <= 1: tile_y = 1
     if tile_y > field_size / graphics.max_field_width: tile_y = field_size / graphics.max_field_width
 
-    #tile = 
+    target_tile = ((tile_y - 1) * graphics.max_field_width + tile_x)
 
-    tile_detail.configure(text=f"Address #{((tile_y - 1) * graphics.max_field_width + tile_x):04}")
+    tile_detail.configure(text=f"Address #{target_tile:04}")
 
-def open_detail_window():
-    pass
+def open_detail_window(target):
+    detail_window = ctk.CTkToplevel()
 
 def close_state_win():
     state_window_button.configure(state=ctk.NORMAL, text="View Core")
