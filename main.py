@@ -86,15 +86,53 @@ def open_setup_menu():
     setup_window.resizable(False, False)
     setup_window.protocol("WM_DELETE_WINDOW", close_setup_win) # Intercepts a press of the OS close button
 
-    core_size_container = ctk.CTkFrame(setup_window, border_color="gray39", border_width=2)
-    core_size_label = ctk.CTkLabel(core_size_container, text="Core Size")
+    warrior_container = ctk.CTkFrame(setup_window)
+    warrior_label = ctk.CTkLabel(warrior_container, font=("TkDefaultFont", 14), text="Warriors")
+    warrior_list_container = ctk.CTkScrollableFrame(warrior_container, width=150, height=200, bg_color="gray39")
+    add_warrior_button = ctk.CTkButton(warrior_container, text="Create Warrior")
+    import_warrior_button = ctk.CTkButton(warrior_container, text="Import Load File [WIP]", state=ctk.DISABLED)
+    edit_warrior_button = ctk.CTkButton(warrior_container, text="Edit Selected", state=ctk.DISABLED)
+    remove_warrior_button = ctk.CTkButton(warrior_container, text="Remove Selected", state=ctk.DISABLED)
+
+    core_size_container = ctk.CTkFrame(setup_window)
+    core_size_label = ctk.CTkLabel(core_size_container, font=("TkDefaultFont", 14), text="Core Size")
     core_size_input = ctk.CTkEntry(core_size_container, placeholder_text="Size...")
     random_button = ctk.CTkCheckBox(core_size_container, text="Random", command=lambda: core_size_input.configure(state=ctk.DISABLED if random_button.get() == 1 else ctk.NORMAL))
 
-    core_size_container.grid()
-    core_size_label.grid()
-    core_size_input.grid()
-    random_button.grid()
+    misc_container = ctk.CTkFrame(setup_window)
+    misc_label = ctk.CTkLabel(misc_container, font=("TkDefaultFont", 14), text="Miscellaneous")
+    max_cycle_label = ctk.CTkLabel(misc_container, text="Max. Cycles:")
+    max_cycle_input = ctk.CTkEntry(misc_container, placeholder_text="Cycles...")
+    max_length_label = ctk.CTkLabel(misc_container, text="Max. Program Length:")
+    max_length_input = ctk.CTkEntry(misc_container, placeholder_text="Length...")
+
+    warrior_container.grid(row=0, column=1, rowspan=2, sticky="nsew")
+    core_size_container.grid(row=0, column=3, sticky="new")
+    misc_container.grid(row=1, column=3, sticky="sw")
+
+    warrior_label.grid(row=1, column=1, columnspan=2, sticky="nsew")
+    warrior_list_container.grid(row=2, column=1, rowspan=8, sticky="nsew")
+    add_warrior_button.grid(row=2, column=2, sticky="nsew")
+    import_warrior_button.grid(row=4, column=2, sticky="nsew")
+    edit_warrior_button.grid(row=6, column=2, sticky="nsew")
+    remove_warrior_button.grid(row=8, column=2, sticky="nsew")
+
+    core_size_label.grid(row=0, column=0, sticky="nsew")
+    core_size_input.grid(row=1, column=0, sticky="nsew")
+    random_button.grid(row=2, column=0, sticky="nsew")
+
+    misc_label.grid(row=0, column=0, columnspan=2, sticky="nsew")
+    max_cycle_label.grid(row=1, column=0, sticky="nsew")
+    max_cycle_input.grid(row=1, column=1, sticky="nsew")
+    max_length_label.grid(row=3, column=0, sticky="nsew")
+    max_length_input.grid(row=3, column=1, sticky="nsew")
+
+    setup_window.grid_columnconfigure([0, 4], weight=1)
+    setup_window.grid_columnconfigure(2, weight=2)
+
+    warrior_container.grid_rowconfigure([2, 3, 4, 5, 6, 7, 8], weight=1)
+
+    misc_container.grid_rowconfigure([1, 2, 3], weight=1)
 
 def close_setup_win():
     setup_button.configure(state=ctk.NORMAL, text="Setup")
@@ -186,7 +224,7 @@ def open_options_menu():
     options_window.title("Program Options")
     options_window.grab_set()
 
-    credits_text = "axMARS 2.0\n\nDeveloped by Nils K (Quadratic) for Indirect UF\n\nInspired by pMARS, CoreWin and the defunct corewar.io\n\nProbably dedicated to someone, IDK"
+    credits_text = "axMARS 2.0\n\nDeveloped by Nils K (Quadratic) for Indirect UF\n\nInspired by pMARS, CoreWin and the defunct corewar.io\n\nLibraries used: customtkinter, PIL, ctypes & dependencies\n\nProbably dedicated to someone, IDK"
 
     dark_mode_toggle = ctk.CTkCheckBox(options_window, command=o.toggle_dark_mode, text="Dark Mode")
     credits_button = ctk.CTkButton(options_window, command=lambda: showinfo(title="Credits", message=credits_text), text="Credits")

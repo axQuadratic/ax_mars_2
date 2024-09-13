@@ -4,7 +4,7 @@
 import customtkinter as ctk
 
 play_speed = 1
-field_size = 20000
+field_size = 8000
 
 state_data = ["red_tile" for i in range(20000)]
 prev_state_data = []
