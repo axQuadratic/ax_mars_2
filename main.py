@@ -21,6 +21,9 @@ root.geometry("450x200")
 root.resizable(False, False)
 root.title("axMARS 2.0")
 
+# This needs to be declared here as its existence is required by several functions
+state_window = None
+
 render_thread = None
 
 def main():
@@ -83,7 +86,6 @@ def toggle_pause():
     pass
 
 def open_setup_menu():
-
     setup_window = ctk.CTkToplevel(root)
     setup_window.title("Match Options")
     setup_window.geometry("500x275")
@@ -95,7 +97,7 @@ def open_setup_menu():
     warrior_container = ctk.CTkFrame(setup_window)
     warrior_label = ctk.CTkLabel(warrior_container, font=("TkDefaultFont", 14), text="Warriors")
     warrior_list_container = ctk.CTkScrollableFrame(warrior_container, width=150, height=200, bg_color="gray39")
-    add_warrior_button = ctk.CTkButton(warrior_container, text="Create Warrior")
+    add_warrior_button = ctk.CTkButton(warrior_container, text="Create Warrior", command=lambda: open_redcode_window(None))
     import_warrior_button = ctk.CTkButton(warrior_container, text="Import Load File [WIP]", state=ctk.DISABLED)
     edit_warrior_button = ctk.CTkButton(warrior_container, text="Edit Selected", state=ctk.DISABLED)
     remove_warrior_button = ctk.CTkButton(warrior_container, text="Remove Selected", state=ctk.DISABLED)
@@ -176,6 +178,38 @@ def apply_setup(window, label, core_size, max_cycles, max_length, random_core):
     
     window.destroy()
     graphics.render_queue.append(o.state_data) # The core viewer, if it is open, needs to be updated
+
+def open_redcode_window(warrior):
+    redcode_window = ctk.CTkToplevel(root)
+    redcode_window.geometry("800x600")
+    redcode_window.resizable(False, False)
+    redcode_window.title("axMARS 2.0 Redcode Editor")
+    redcode_window.grab_set()
+
+    redcode_input = ctk.CTkTextbox(redcode_window, font=("Consolas", 12), height=580, wrap=ctk.NONE)
+
+    compiled_container = ctk.CTkScrollableFrame(redcode_window)
+    compiled_header = ctk.CTkLabel(compiled_container, anchor="w", text="Parsed Redcode:")
+    compiled_display = ctk.CTkLabel(compiled_container, font=("Consolas", 14), anchor="w", justify="left", text="MOV.I $0, $1\nJMP.B $7999, #0\nDAT.F #0, #0")
+
+    save_button = ctk.CTkButton(redcode_window, text="Save")
+
+    redcode_input.grid(row=0, column=0, rowspan=3, sticky="nsew")
+
+    compiled_container.grid(row=0, column=1, sticky="nsew")
+    compiled_header.grid(row=0, column=0, sticky="ew")
+    compiled_display.grid(row=1, column=0, sticky="nsew")
+
+    save_button.grid(row=2, column=1, sticky="nsew")
+
+    redcode_window.grid_columnconfigure(0, weight=2)
+    redcode_window.grid_columnconfigure(1, weight=1)
+    redcode_window.grid_rowconfigure(0, weight=10)
+    redcode_window.grid_rowconfigure([1, 2], weight=1)
+
+    compiled_container.grid_rowconfigure(0, weight=1)
+    compiled_container.grid_rowconfigure(1, weight=10)
+    compiled_container.grid_columnconfigure(0, weight=1)
 
 def open_state_window():
     global state_window, state_canvas, detail_button
@@ -296,10 +330,10 @@ def open_detail_window():
     for i in range(10):
         info_labels.append(ctk.CTkLabel(data_container, text_color="white", text=f"#{str(i + 1).zfill(4 if o.field_size < 10000 else 5)}: DAT.F #0, #0"))
 
-    up_ten_button = ctk.CTkButton(options_container, text="-10", width=30, command=lambda: update_detail_window(detail_target - 10))
-    up_one_button = ctk.CTkButton(options_container, text="↑", width=30, command=lambda: update_detail_window(detail_target - 1))
-    down_one_button = ctk.CTkButton(options_container, text="↓", width=30, command=lambda: update_detail_window(detail_target + 1))
-    down_ten_button = ctk.CTkButton(options_container, text="+10", width=30, command=lambda: update_detail_window(detail_target + 10))
+    up_ten_button = ctk.CTkButton(options_container, text="-10", width=30, command=lambda: update_detail_window(detail_target - 10, False))
+    up_one_button = ctk.CTkButton(options_container, text="↑", width=30, command=lambda: update_detail_window(detail_target - 1, False))
+    down_one_button = ctk.CTkButton(options_container, text="↓", width=30, command=lambda: update_detail_window(detail_target + 1, False))
+    down_ten_button = ctk.CTkButton(options_container, text="+10", width=30, command=lambda: update_detail_window(detail_target + 10, False))
 
     search_bar.grid(row=0, column=0, columnspan=2, sticky="nsew")
     data_container.grid(row=1, column=0, sticky="nsew")
@@ -321,10 +355,13 @@ def open_detail_window():
     options_container.grid_rowconfigure([0, 1, 2, 3], weight=1)
     options_container.grid_rowconfigure(0, weight=1)
 
-    update_detail_window(detail_target)
+    update_detail_window(detail_target, False)
 
-def update_detail_window(target):
-    global detail_target, info_labels
+def update_detail_window(target, from_search):
+    global detail_target, info_labels, search_value
+
+    if not from_search:
+        search_value.set("")
 
     if type(target) != int:
         # Target value comes from search bar
@@ -332,10 +369,10 @@ def update_detail_window(target):
         except: return
 
     if target < 0:
-        update_detail_window(0)
+        update_detail_window(0, from_search)
         return
     if target > o.field_size - 10:
-        update_detail_window(o.field_size - 10)
+        update_detail_window(o.field_size - 10, from_search)
         return
 
     for i in range(len(o.state_data)):
@@ -350,9 +387,9 @@ def update_detail_window(target):
     graphics.render_queue.append(o.state_data)
 
 # Wrapper callback for the search bar trace
-def detail_search(a, b, c):
+def detail_search(w, t, f):
     global search_value
-    update_detail_window(search_value.get())
+    update_detail_window(search_value.get(), True)
 
 def close_detail_win():
     for i in range(len(o.state_data)):
