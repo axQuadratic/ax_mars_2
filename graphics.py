@@ -10,13 +10,16 @@ max_field_width = 100
 
 tiles = {}
 
+render_queue = []
+
 class tile_colors(Enum):
-    blue_tile = (0, 200, 200)
-    red_tile = (200, 0, 0)
-    green_tile = (0, 200, 0)
-    yellow_tile = (200, 200, 0)
-    white_tile = (255, 255, 255)
-    black_tile = (10, 10, 10)
+    blue = (0, 200, 200)
+    red = (200, 0, 0)
+    green = (0, 200, 0)
+    yellow = (200, 200, 0)
+    white = (255, 255, 255)
+    black = (10, 10, 10)
+    highlight = (25, 66, 113)
 
 def main():
     for color in tile_colors:
@@ -37,29 +40,29 @@ def pregenerate_tile(tile_size, border_width, fill_color, cross):
         if cross:
             for j in range(int((tile_size - border_width * 2) / 2)):
                 for i in range(j):
-                    data.append(tile_colors.black_tile)
+                    data.append(tile_colors.black)
 
                 for i in range(border_width * 2):
                     data.append(tile_colors(fill_color).value)
 
                 for i in range(tile_size - (border_width * 2 + j) * 2):
-                    data.append(tile_colors.black_tile)
+                    data.append(tile_colors.black)
 
                 for i in range(border_width * 2):
                     data.append(tile_colors(fill_color).value)
                 
                 for i in range(j):
-                    data.append(tile_colors.black_tile)
+                    data.append(tile_colors.black)
 
             for j in range(int((tile_size - border_width * 2) / 2), 0, -1):
                 for i in range(j):
-                    data.append(tile_colors.black_tile)
+                    data.append(tile_colors.black)
 
                 for i in range(border_width * 2):
                     data.append(tile_colors(fill_color).value)
 
                 for i in range(tile_size - (border_width * 2 + j) * 2):
-                    data.append(tile_colors.black_tile)
+                    data.append(tile_colors.black)
 
                 for i in range(border_width * 2):
                     data.append(tile_colors(fill_color).value)
@@ -89,7 +92,10 @@ def create_image_from_state_data(state : list, prev_state : list, field_size : i
         a_max_field_width = max_field_width
 
     row_count = math.ceil(field_size / a_max_field_width)
-    new_image = Image.new("RGB", (a_max_field_width * tile_size, row_count * tile_size)) if prev_image is None else prev_image
+    if prev_image is None or prev_image.size != (a_max_field_width * tile_size, row_count * tile_size): # The previous image can only be used as a base if their dimensions match
+        new_image = Image.new("RGB", (a_max_field_width * tile_size, row_count * tile_size))
+    else:
+        new_image = prev_image
     if state == [] or state == prev_state: return new_image # No core is initialized or core is unchanged from previous iteration
 
     # Draw the image by placing pregenerated tiles as needed
@@ -99,10 +105,10 @@ def create_image_from_state_data(state : list, prev_state : list, field_size : i
         for x in range(a_max_field_width):
             if prev_state == []:
                 # If no core was previously loaded, it must obviously be created from scratch
-                img_data = draw_tile(img_data, x * tile_size, y * tile_size, state[current_tile])
+                img_data = draw_tile(img_data, x * tile_size, y * tile_size, state[current_tile].color if not state[current_tile].highlighted else "highlight")
             elif state[current_tile] != prev_state[current_tile]:
                 # This step takes up quite a bit of CPU time, hence why it is skipped if the image would be unchanged
-                img_data = draw_tile(img_data, x * tile_size, y * tile_size, state[current_tile])
+                img_data = draw_tile(img_data, x * tile_size, y * tile_size, state[current_tile].color if not state[current_tile].highlighted else "highlight")
             current_tile += 1
             if current_tile >= field_size: break
 
