@@ -1,8 +1,8 @@
 # This library handles primarily the displaying of core data
 
-from enum import Enum
 from PIL import Image
 import math
+import options as o
 
 tile_size = 20
 border_width = 1
@@ -12,19 +12,10 @@ tiles = {}
 
 render_queue = []
 
-class tile_colors(Enum):
-    blue = (0, 200, 200)
-    red = (200, 0, 0)
-    green = (0, 200, 0)
-    yellow = (200, 200, 0)
-    white = (255, 255, 255)
-    black = (10, 10, 10)
-    highlight = (25, 66, 113)
-
 def main():
-    for color in tile_colors:
-        tiles[tile_colors(color).name] = pregenerate_tile(tile_size, border_width, color, False)    
-        tiles["cross_" + tile_colors(color).name] = pregenerate_tile(tile_size, border_width, color, True)
+    for color in o.tile_colors:
+        tiles[o.tile_colors(color).name] = pregenerate_tile(tile_size, border_width, color, False)    
+        tiles["cross_" + o.tile_colors(color).name] = pregenerate_tile(tile_size, border_width, color, True)
 
 def pregenerate_tile(tile_size, border_width, fill_color, cross):
     data = []
@@ -40,39 +31,39 @@ def pregenerate_tile(tile_size, border_width, fill_color, cross):
         if cross:
             for j in range(int((tile_size - border_width * 2) / 2)):
                 for i in range(j):
-                    data.append(tile_colors.black)
+                    data.append(o.tile_colors.black)
 
                 for i in range(border_width * 2):
-                    data.append(tile_colors(fill_color).value)
+                    data.append(o.tile_colors(fill_color).value)
 
                 for i in range(tile_size - (border_width * 2 + j) * 2):
-                    data.append(tile_colors.black)
+                    data.append(o.tile_colors.black)
 
                 for i in range(border_width * 2):
-                    data.append(tile_colors(fill_color).value)
+                    data.append(o.tile_colors(fill_color).value)
                 
                 for i in range(j):
-                    data.append(tile_colors.black)
+                    data.append(o.tile_colors.black)
 
             for j in range(int((tile_size - border_width * 2) / 2), 0, -1):
                 for i in range(j):
-                    data.append(tile_colors.black)
+                    data.append(o.tile_colors.black)
 
                 for i in range(border_width * 2):
-                    data.append(tile_colors(fill_color).value)
+                    data.append(o.tile_colors(fill_color).value)
 
                 for i in range(tile_size - (border_width * 2 + j) * 2):
-                    data.append(tile_colors.black)
+                    data.append(o.tile_colors.black)
 
                 for i in range(border_width * 2):
-                    data.append(tile_colors(fill_color).value)
+                    data.append(o.tile_colors(fill_color).value)
                 
                 for i in range(j):
                     data.append((0, 0, 0))
 
         else:
             for i in range(tile_size - border_width * 2):
-                data.append(tile_colors(fill_color).value)
+                data.append(o.tile_colors(fill_color).value)
 
         for i in range(border_width):
             data.append((0, 0, 0))

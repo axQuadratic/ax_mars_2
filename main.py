@@ -8,18 +8,19 @@ from PIL import ImageTk
 from ctypes import windll
 from random import randint
 from time import sleep
+from pyperclip import copy
 import graphics
 import options as o
+import compiler
 
 # Global variables are declared in options.py
 
 ctk.set_appearance_mode("system")
 ctk.set_default_color_theme("dark-blue")
 
-root = ctk.CTk()
-root.geometry("450x200")
-root.resizable(False, False)
-root.title("axMARS 2.0")
+o.root.geometry("450x200")
+o.root.resizable(False, False)
+o.root.title("axMARS 2.0")
 
 # This needs to be declared here as its existence is required by several functions
 state_window = None
@@ -34,14 +35,14 @@ def main():
     render_thread.start()
 
     # Create UI elements for the main window
-    top_container = ctk.CTkFrame(root)
+    top_container = ctk.CTkFrame(o.root)
     state_window_button = ctk.CTkButton(top_container, text="View Core", command=open_state_window)
     pspace_button = ctk.CTkButton(top_container, text="View P-Space [WIP]", state=ctk.DISABLED)
     setup_button = ctk.CTkButton(top_container, text="Setup", command=open_setup_menu)
     help_button = ctk.CTkButton(top_container, text="Help [WIP]", state=ctk.DISABLED)
     options_button = ctk.CTkButton(top_container, text="Options", command=open_options_menu)
 
-    bottom_container = ctk.CTkFrame(root)
+    bottom_container = ctk.CTkFrame(o.root)
     speed_control = ctk.CTkSlider(bottom_container, from_=0, to=9, number_of_steps=9, orientation=ctk.HORIZONTAL, command=change_speed)
     speed_display = ctk.CTkLabel(bottom_container, text="1x", width=35)
     max_speed_button = ctk.CTkCheckBox(bottom_container, text="Max. Simulation Speed")
@@ -65,9 +66,9 @@ def main():
     async_button.grid(row=2, column=2, columnspan=2, sticky="nsew")
     one_step_button.grid(row=0, column=3, sticky="nsew")
 
-    root.grid_rowconfigure([0, 2], weight=1)
-    root.grid_rowconfigure(1, weight=3)
-    root.grid_columnconfigure(0, weight=1)
+    o.root.grid_rowconfigure([0, 2], weight=1)
+    o.root.grid_rowconfigure(1, weight=3)
+    o.root.grid_columnconfigure(0, weight=1)
 
     top_container.grid_rowconfigure(1, weight=1)
     top_container.grid_columnconfigure([1, 3], weight=1)
@@ -86,7 +87,7 @@ def toggle_pause():
     pass
 
 def open_setup_menu():
-    setup_window = ctk.CTkToplevel(root)
+    setup_window = ctk.CTkToplevel(o.root)
     setup_window.title("Match Options")
     setup_window.geometry("500x275")
     setup_window.resizable(False, False)
@@ -115,7 +116,7 @@ def open_setup_menu():
     max_length_input = ctk.CTkEntry(misc_container, placeholder_text="Length...")
 
     error_label = ctk.CTkLabel(setup_window, text_color="red", text="")
-    apply_button = ctk.CTkButton(setup_window, text="Apply", command=lambda: apply_setup(setup_window, error_label, core_size_input.get(), max_cycle_input.get(), max_length_input.get(), random_core.get()))
+    apply_button = ctk.CTkButton(setup_window, text="Apply", command=lambda: o.apply_setup(setup_window, error_label, core_size_input.get(), max_cycle_input.get(), max_length_input.get(), random_core.get()))
 
     warrior_container.grid(row=0, column=0, rowspan=2, sticky="nsew")
     core_size_container.grid(row=0, column=2, sticky="new")
@@ -152,35 +153,8 @@ def open_setup_menu():
     max_cycle_input.insert(0, o.max_cycle_count)
     max_length_input.insert(0, o.max_program_length)
 
-def apply_setup(window, label, core_size, max_cycles, max_length, random_core):
-    # Error checking
-    try:
-        if random_core == 1:
-            core_size = randint(max_length * len(o.warriors), 20000)
-
-        core_size = int(core_size)
-        max_cycles = int(max_cycles)
-        max_length = int(max_length)
-
-        if max_cycles <= 0 or max_length <= 0:
-            raise Exception
-    except:
-        label.configure(text="One or more parameters has an invalid value")
-        return
-    
-    if core_size < max_length * len(o.warriors):
-        label.configure(text="Core size cannot be smaller than max. warrior length * warrior count")
-        return
-    
-    o.field_size = core_size
-    o.max_cycle_count = max_cycles
-    o.max_program_length = max_length
-    
-    window.destroy()
-    graphics.render_queue.append(o.state_data) # The core viewer, if it is open, needs to be updated
-
 def open_redcode_window(warrior):
-    redcode_window = ctk.CTkToplevel(root)
+    redcode_window = ctk.CTkToplevel(o.root)
     redcode_window.geometry("800x600")
     redcode_window.resizable(False, False)
     redcode_window.title("axMARS 2.0 Redcode Editor")
@@ -192,7 +166,11 @@ def open_redcode_window(warrior):
     compiled_header = ctk.CTkLabel(compiled_container, anchor="w", text="Parsed Redcode:")
     compiled_display = ctk.CTkLabel(compiled_container, font=("Consolas", 14), anchor="w", justify="left", text="MOV.I $0, $1\nJMP.B $7999, #0\nDAT.F #0, #0")
 
-    save_button = ctk.CTkButton(redcode_window, text="Save")
+    button_container = ctk.CTkFrame(redcode_window)
+    compile_button = ctk.CTkButton(button_container, command=lambda: create_warrior(redcode_input.get("1.0", "end-1c").split("\n")), text="Compile")
+    save_button = ctk.CTkButton(button_container, text="Add to Core", state=ctk.DISABLED)
+    export_button = ctk.CTkButton(button_container, text="Save as file [WIP]", state=ctk.DISABLED)
+    clip_button = ctk.CTkButton(button_container, text="Copy to clipboard", command=lambda: copy(compiled_display.cget("text")), state=ctk.DISABLED)
 
     redcode_input.grid(row=0, column=0, rowspan=3, sticky="nsew")
 
@@ -200,7 +178,11 @@ def open_redcode_window(warrior):
     compiled_header.grid(row=0, column=0, sticky="ew")
     compiled_display.grid(row=1, column=0, sticky="nsew")
 
-    save_button.grid(row=2, column=1, sticky="nsew")
+    button_container.grid(row=2, column=1, sticky="nsew")
+    compile_button.grid(row=0, column=0, columnspan=2, sticky="nsew")
+    save_button.grid(row=1, column=0, rowspan=2, sticky="nsew")
+    export_button.grid(row=1, column=1, sticky="nsew")
+    clip_button.grid(row=2, column=1, sticky="nsew")
 
     redcode_window.grid_columnconfigure(0, weight=2)
     redcode_window.grid_columnconfigure(1, weight=1)
@@ -211,12 +193,24 @@ def open_redcode_window(warrior):
     compiled_container.grid_rowconfigure(1, weight=10)
     compiled_container.grid_columnconfigure(0, weight=1)
 
+    button_container.grid_rowconfigure([0, 1, 2], weight=1)
+    button_container.grid_columnconfigure([0, 1], weight=1)
+
+    if warrior is not None:
+        # Editing an extant warrior; needs to insert its data
+        redcode_input.insert(0, warrior.raw_data)
+        create_warrior(warrior.raw_data)
+
+# Creates a warrior from text data entered by user
+def create_warrior(data):
+    load_file, errors = compiler.compile_load_file(data)
+
 def open_state_window():
     global state_window, state_canvas, detail_button
 
     state_window_button.configure(state=ctk.DISABLED, text="Core Readout Active")
 
-    state_window = ctk.CTkToplevel(root)
+    state_window = ctk.CTkToplevel(o.root)
     state_window.resizable(False, False) # Consider making this resizable in the future; right now resizing it would break everything
     state_window.title("Core Readout")
     state_window.protocol("WM_DELETE_WINDOW", close_state_win)
@@ -267,7 +261,7 @@ def update_state_canvas():
 
     o.state_image = graphics.create_image_from_state_data(o.state_data, o.prev_state_data, o.field_size, o.state_image)
     o.resized_state_image = o.state_image.resize((800, round(o.state_image.height * (800 / o.state_image.width))))
-    root.display_image = display_image = ImageTk.PhotoImage(o.resized_state_image)
+    o.root.display_image = display_image = ImageTk.PhotoImage(o.resized_state_image)
     state_canvas.create_image((405, o.resized_state_image.height // 2 + 5), image=display_image)
 
     # The next step breaks if the Windows scaling setting is above 100%, hence that needs to be checked for
@@ -314,7 +308,7 @@ def open_detail_window():
 
     detail_button.configure(state=ctk.DISABLED, text="Detail Viewer Active")
 
-    detail_window = ctk.CTkToplevel(root)
+    detail_window = ctk.CTkToplevel(o.root)
     detail_window.title("Core Details")
     detail_window.geometry("300x300")
     detail_window.resizable(False, False)
@@ -400,13 +394,13 @@ def close_detail_win():
     detail_window.destroy()
 
 def open_options_menu():
-    options_window = ctk.CTkToplevel(root)
+    options_window = ctk.CTkToplevel(o.root)
     options_window.geometry("250x200")
     options_window.resizable(False, False)
     options_window.title("Program Options")
     options_window.grab_set()
 
-    credits_text = "axMARS 2.0\n\nDeveloped by Nils K (Quadratic) for Indirect UF\n\nInspired by pMARS, CoreWin and the defunct corewar.io\n\nLibraries used: customtkinter, PIL, ctypes & dependencies\n\nProbably dedicated to someone, IDK"
+    credits_text = "axMARS 2.0\n\nDeveloped by Nils K (Quadratic) for Indirect UF\n\nInspired by pMARS, CoreWin and the defunct corewar.io\n\nLibraries used: customtkinter, PIL, pyperclip & dependencies\n\nProbably dedicated to someone, IDK"
 
     dark_mode_toggle = ctk.CTkCheckBox(options_window, command=o.toggle_dark_mode, text="Dark Mode")
     credits_button = ctk.CTkButton(options_window, command=lambda: showinfo(title="Credits", message=credits_text), text="Credits")
@@ -420,4 +414,4 @@ def open_options_menu():
     if ctk.get_appearance_mode() == "Dark": dark_mode_toggle.select()
 
 main()
-root.mainloop()
+o.root.mainloop()
