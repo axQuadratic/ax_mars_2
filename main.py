@@ -203,7 +203,7 @@ def open_redcode_window(warrior):
 
 # Creates a warrior from text data entered by user
 def create_warrior(data):
-    load_file, errors = compiler.compile_load_file(data)
+    compiler.compile_load_file(data)
 
 def open_state_window():
     global state_window, state_canvas, detail_button
@@ -242,13 +242,13 @@ def open_state_window():
     bottom_bar_container.grid_columnconfigure([1, 3], weight=1)
     bottom_bar_container.grid_columnconfigure(5, weight=20)
 
-    graphics.render_queue.append(o.state_data)
+    o.render_queue.append(o.state_data)
 
 def graphics_listener():
     # Always runs in the background; executes the render queue whenever it is non-empty
     while True:
         sleep(0.1) # Delay to prevent excessive CPU usage
-        if graphics.render_queue == []: continue
+        if o.render_queue == []: continue
         update_state_canvas()
 
 def update_state_canvas():
@@ -257,7 +257,7 @@ def update_state_canvas():
     # Ignore if function is called when the window is not open
     if state_window is None or not state_window.winfo_exists(): return
     # Ignore if function is called while the render queue is empty
-    if graphics.render_queue == []: return
+    if o.render_queue == []: return
 
     o.state_image = graphics.create_image_from_state_data(o.state_data, o.prev_state_data, o.field_size, o.state_image)
     o.resized_state_image = o.state_image.resize((800, round(o.state_image.height * (800 / o.state_image.width))))
@@ -270,7 +270,7 @@ def update_state_canvas():
     # Recalculate window size based on the size of the image; 40px margin for the border and bottom bar
     state_window.geometry(f"{round(810 / scale_factor)}x{round(o.resized_state_image.height / scale_factor) + 40}")
 
-    graphics.render_queue.pop(0)
+    o.render_queue.pop(0)
 
 # The below code is currently nonfunctional: I have decided to comment it out until I can be bothered to fix it
 """
@@ -378,7 +378,7 @@ def update_detail_window(target, from_search):
         info_labels[i].configure(text_color=graphics.tile_colors(o.state_data[detail_target + i].color) if o.state_data[detail_target + i].color != "black" and o.state_data[detail_target + i].color != "highlight" else "white")
         o.state_data[detail_target + i].highlighted = True
 
-    graphics.render_queue.append(o.state_data)
+    o.render_queue.append(o.state_data)
 
 # Wrapper callback for the search bar trace
 def detail_search(w, t, f):
@@ -388,7 +388,7 @@ def detail_search(w, t, f):
 def close_detail_win():
     for i in range(len(o.state_data)):
         o.state_data[i].highlighted = False
-    graphics.render_queue = [o.state_data]
+    o.render_queue = [o.state_data]
     try: detail_button.configure(state=ctk.NORMAL, text="Open Detail Viewer")
     except: pass
     detail_window.destroy()

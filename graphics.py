@@ -10,8 +10,6 @@ max_field_width = 100
 
 tiles = {}
 
-render_queue = []
-
 def main():
     for color in o.tile_colors:
         tiles[o.tile_colors(color).name] = pregenerate_tile(tile_size, border_width, color, False)    

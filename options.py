@@ -3,7 +3,6 @@
 
 import customtkinter as ctk
 from enum import Enum
-from graphics import render_queue
 from random import randint
 
 class tile_colors(Enum):
@@ -29,7 +28,7 @@ opcodes = [
 ]
 
 class Instruction:
-    def __init__(self, label : str, opcode : str, modifier : str, a_mode_1 : str, address_1 : int, a_mode_2 : str, address_2 : int):
+    def __init__(self, label : str, opcode : str, modifier : str, a_mode_1 : str, address_1, a_mode_2 : str, address_2):
         self.label = label
         self.opcode = opcode
         self.a_mode_1 = a_mode_1
@@ -69,6 +68,8 @@ state_image = None
 resized_state_image = None
 
 speed_levels = [1, 2, 3, 4, 5, 10, 25, 50, 75, 100]
+
+render_queue = []
 
 # Setup menu
 
