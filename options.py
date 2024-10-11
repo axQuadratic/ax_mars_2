@@ -20,7 +20,7 @@ addressing_modes = [
 ]
 
 modifiers = [
-    ".A", ".B", ".AB", ".BA", ".F", ".X", ".I"
+    "A", "B", "AB", "BA", "F", "X", "I"
 ]
 
 opcodes = [
@@ -31,6 +31,7 @@ class Instruction:
     def __init__(self, label : str, opcode : str, modifier : str, a_mode_1 : str, address_1, a_mode_2 : str, address_2):
         self.label = label
         self.opcode = opcode
+        self.modifier = modifier
         self.a_mode_1 = a_mode_1
         self.address_1 = address_1
         self.a_mode_2 = a_mode_2

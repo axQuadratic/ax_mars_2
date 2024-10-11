@@ -154,6 +154,8 @@ def open_setup_menu():
     max_length_input.insert(0, o.max_program_length)
 
 def open_redcode_window(warrior):
+    global compiled_display
+
     redcode_window = ctk.CTkToplevel(o.root)
     redcode_window.geometry("800x600")
     redcode_window.resizable(False, False)
@@ -167,7 +169,8 @@ def open_redcode_window(warrior):
     compiled_display = ctk.CTkLabel(compiled_container, font=("Consolas", 14), anchor="w", justify="left", text="MOV.I $0, $1\nJMP.B $7999, #0\nDAT.F #0, #0")
 
     button_container = ctk.CTkFrame(redcode_window)
-    compile_button = ctk.CTkButton(button_container, command=lambda: create_warrior(redcode_input.get("1.0", "end-1c").split("\n")), text="Compile")
+    debug_button = ctk.CTkCheckBox(button_container, text="Enable debug output (slow)")
+    compile_button = ctk.CTkButton(button_container, command=lambda: create_warrior(redcode_input.get("1.0", "end-1c").split("\n"), bool(debug_button.get())), text="Compile")
     save_button = ctk.CTkButton(button_container, text="Add to Core", state=ctk.DISABLED)
     export_button = ctk.CTkButton(button_container, text="Save as file [WIP]", state=ctk.DISABLED)
     clip_button = ctk.CTkButton(button_container, text="Copy to clipboard", command=lambda: copy(compiled_display.cget("text")), state=ctk.DISABLED)
@@ -179,10 +182,11 @@ def open_redcode_window(warrior):
     compiled_display.grid(row=1, column=0, sticky="nsew")
 
     button_container.grid(row=2, column=1, sticky="nsew")
-    compile_button.grid(row=0, column=0, columnspan=2, sticky="nsew")
-    save_button.grid(row=1, column=0, rowspan=2, sticky="nsew")
-    export_button.grid(row=1, column=1, sticky="nsew")
-    clip_button.grid(row=2, column=1, sticky="nsew")
+    debug_button.grid(row=0, column=0, columnspan=2, sticky="nsew")
+    compile_button.grid(row=1, column=0, columnspan=2, sticky="nsew")
+    save_button.grid(row=2, column=0, rowspan=2, sticky="nsew")
+    export_button.grid(row=2, column=1, sticky="nsew")
+    clip_button.grid(row=3, column=1, sticky="nsew")
 
     redcode_window.grid_columnconfigure(0, weight=2)
     redcode_window.grid_columnconfigure(1, weight=1)
@@ -193,7 +197,7 @@ def open_redcode_window(warrior):
     compiled_container.grid_rowconfigure(1, weight=10)
     compiled_container.grid_columnconfigure(0, weight=1)
 
-    button_container.grid_rowconfigure([0, 1, 2], weight=1)
+    button_container.grid_rowconfigure([1, 2, 3], weight=1)
     button_container.grid_columnconfigure([0, 1], weight=1)
 
     if warrior is not None:
@@ -202,8 +206,15 @@ def open_redcode_window(warrior):
         create_warrior(warrior.raw_data)
 
 # Creates a warrior from text data entered by user
-def create_warrior(data):
-    compiler.compile_load_file(data)
+def create_warrior(data, debug):
+    load_file, error_list = compiler.compile_load_file(data, debug)
+    print(error_list)
+    if error_list != "":
+        # Errors are present
+        print(error_list)
+        return
+    
+    compiled_display.configure(text="\n".join(load_file))
 
 def open_state_window():
     global state_window, state_canvas, detail_button
