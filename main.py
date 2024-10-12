@@ -145,13 +145,21 @@ def open_setup_menu():
     setup_window.grid_rowconfigure([0, 1, 2], weight=1)
     setup_window.grid_columnconfigure(1, weight=1)
 
-    warrior_container.grid_rowconfigure([2, 3, 4, 5, 6, 7, 8], weight=1)
+    warrior_container.grid_rowconfigure(list(range(2, 9)), weight=1)
 
     misc_container.grid_rowconfigure([2, 3, 5], weight=1)
 
     core_size_input.insert(0, o.field_size)
     max_cycle_input.insert(0, o.max_cycle_count)
     max_length_input.insert(0, o.max_program_length)
+
+    # Display all warriors in order
+    warrior_var = ctk.IntVar(value=0)
+    i = 0
+    for warrior in o.warriors_temp:
+        new_warrior = ctk.CTkRadioButton(warrior_list_container, width=140, height=20, text=warrior.name, variable=warrior_var, value=i)
+        new_warrior.grid(row=i, column=0, sticky="nsew")
+        i += 1
 
 def open_redcode_window(warrior):
     global compiled_display
@@ -166,7 +174,7 @@ def open_redcode_window(warrior):
 
     compiled_container = ctk.CTkScrollableFrame(redcode_window)
     compiled_header = ctk.CTkLabel(compiled_container, anchor="w", text="Parsed Redcode:")
-    compiled_display = ctk.CTkLabel(compiled_container, font=("Consolas", 14), anchor="w", justify="left", text="MOV.I $0, $1\nJMP.B $7999, #0\nDAT.F #0, #0")
+    compiled_display = ctk.CTkLabel(compiled_container, font=("Consolas", 14), anchor="w", justify="left", text="No readable lines")
 
     button_container = ctk.CTkFrame(redcode_window)
     debug_button = ctk.CTkCheckBox(button_container, text="Enable debug output (slow)")
@@ -208,13 +216,31 @@ def open_redcode_window(warrior):
 # Creates a warrior from text data entered by user
 def create_warrior(data, debug):
     load_file, error_list = compiler.compile_load_file(data, debug)
-    print(error_list)
-    if error_list != "":
+    if error_list != []:
         # Errors are present
-        print(error_list)
+        compiled_display.configure(text_color="red", text=f"({len(error_list)} errors)\n{'\n'.join(error_list)}")
         return
-    
-    compiled_display.configure(text="\n".join(load_file))
+
+    load_text = []
+    for line in load_file:
+        instruction = ""
+        instruction += line.opcode
+        instruction += "." + line.modifier
+        instruction += " " + line.a_mode_1
+        instruction += line.address_1
+        instruction += ", " + line.a_mode_2
+        instruction += line.address_2
+
+        load_text.append(instruction)
+
+    if load_text == []:
+        compiled_display.configure(text_color="white", text="No readable lines")
+        return
+
+    compiled_display.configure(text_color="white", text="\n".join(load_text))
+
+    warrior = o.Warrior(len(o.warriors) + 1, len(o.warriors), "blue", data, load_file)
+    o.warriors_temp.append(warrior)
 
 def open_state_window():
     global state_window, state_canvas, detail_button

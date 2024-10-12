@@ -60,7 +60,8 @@ field_size = 8000
 max_cycle_count = 80000
 max_program_length = 100
 
-warriors = [1, 2, 3, 4] # Temporary values
+warriors = []
+warriors_temp = []
 
 state_data = [Tile(1, "black", "DAT.F #0, #0", False) for i in range(20000)]
 prev_state_data = []
@@ -99,6 +100,9 @@ def apply_setup(window, label, core_size, max_cycles, max_length, random_core):
     field_size = core_size
     max_cycle_count = max_cycles
     max_program_length = max_length
+
+    for warrior in warriors_temp:
+        warriors.append(Warrior(len(warriors) + 1, len(warriors), "blue", warrior.raw_data, warrior.load_file))
     
     window.destroy()
     render_queue.append(state_data) # The core viewer, if it is open, needs to be updated

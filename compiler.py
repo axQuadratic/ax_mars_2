@@ -18,13 +18,14 @@ def compile_load_file(data, debug):
 
     if data == []: return
     load_data = []
-    error_list = ""
+    error_list = []
 
     if debug: debug_enabled = True
 
     debug_print("Compiler active. Processing assembly file...")
 
     # Read each line individually and parse it into an Instruction object
+    current_line = 0
     for line in data:
         load_line = o.Instruction(None, None, None, None, None, None, None)
 
@@ -42,23 +43,31 @@ def compile_load_file(data, debug):
         if len(attributes) > 4:
             # Too many attributes!
             debug_print("Compiler error detected. Aborting...")
-            error_list += f"Bad instruction at '{line}' (too many attributes)"
+            error_list.append(f"Bad instruction at '{line.strip()}' (too many attributes)")
             load_data.append(load_line)
             continue
         
+        initial_data = attributes[0].upper().split(".")
         # Insert every attribute into the instruction object in order
-        if len(attributes) == 4:
+        if initial_data[0] not in o.opcodes:
             # Label is present
             if attributes[0].isnumeric():
                 # Labels cannot be purely numeric
                 debug_print("Detected label is purely numeric. Ignoring...")
             else:
                 load_line.label = attributes[0]
+                labels.append(Label(load_line.label, current_line))
                 debug_print("Line has label: " + load_line.label)
             attributes.pop(0) # To ensure consistency with labelless instructions
+            if len(attributes) == 0:
+                # Label has no instruction
+                debug_print("Compiler error detected. Aborting...")
+                error_list.append(f"Bad instruction at '{line.strip()}' (invalid opcode)")
+                load_data.append(load_line)
+                continue
 
-        # Extract the modifier from the opcode
         opcode_data = attributes[0].upper().split(".")
+        # Extract the modifier from the opcode
         load_line.opcode = opcode_data[0]
         if len(opcode_data) == 2:
             # Modifier is determined later if none is declared
@@ -66,7 +75,7 @@ def compile_load_file(data, debug):
         if opcode_data[0] not in o.opcodes or (len(opcode_data) > 1 and opcode_data[1] not in o.modifiers) or len(opcode_data) > 2:
             # Bad opcode
             debug_print("Compiler error detected. Aborting...")
-            error_list += f"Bad instruction at '{line}' (invalid opcode)"
+            error_list.append(f"Bad instruction at '{line.strip()}' (invalid opcode)")
             load_data.append(load_line)
             continue
 
@@ -76,30 +85,45 @@ def compile_load_file(data, debug):
             debug_print(f"Valid opcode confirmed: {load_line.opcode}. No modifier declared, processing...")
 
         # Extract addressing modes from adresses
-        a_mode_1 = attributes[1][0:1]
-        a_mode_2 = attributes[2][0:1]
+        if len(attributes) >= 2:
+            a_mode_1 = attributes[1][0:1]
+            att_1 = None
+        else:
+            # All other address-related blocks fall through if these are set here 
+            a_mode_1 = "$" if load_line.opcode != "DAT" else "#"
+            att_1 = "0,"
+            debug_print(f"No A-field specified, assuming {a_mode_1}0...")
+        
+        second_attribute_unset = False
+        if len(attributes) >= 3:
+            a_mode_2 = attributes[2][0:1]
+            att_2 = None
+        else:
+            a_mode_2 = "$" if load_line.opcode != "DAT" else "#"
+            att_2 = "0"
+            second_attribute_unset = True
+            debug_print(f"No B-field specified, assuming {a_mode_2}0...")
 
         if a_mode_1 not in o.addressing_modes:
             # No addressing mode is present
             debug_print(f"No addressing mode detected in A-field. Assuming {'relative' if load_line.opcode != 'DAT' else 'immediate'}...")
             a_mode_1 = "$" if load_line.opcode != "DAT" else "#"
             att_1 = attributes[1]
-        else:
+        elif att_1 is None:
             att_1 = attributes[1][1:len(attributes[1])]
         if a_mode_2 not in o.addressing_modes:
             debug_print(f"No addressing mode detected in B-field. Assuming {'relative' if load_line.opcode != 'DAT' else 'immediate'}...")
             a_mode_2 = "$" if load_line.opcode != "DAT" else "#"
             att_2 = attributes[2]
-        else:
+        elif att_2 is None:
             att_2 = attributes[2][1:len(attributes[2])]
 
         debug_print(f"Field expressions determined as {a_mode_1}{att_1} {a_mode_2}{att_2}")
 
         # Adresses must be comma separated according to ICWS 94
-        if list(att_1)[-1] != ",":
+        if list(att_1)[-1] != "," and not second_attribute_unset:
             debug_print("Compiler error detected. Aborting...")
-            
-            error_list += f"Bad instruction at '{line}' (invalid adress)"
+            error_list.append(f"Bad instruction at '{line.strip()}' (invalid adress)")
             load_data.append(load_line)
             continue
 
@@ -120,7 +144,9 @@ def compile_load_file(data, debug):
         load_data.append(load_line)
         debug_print(f"Line completed. Load file output: {load_line.opcode}.{load_line.modifier} {load_line.a_mode_1}{load_line.address_1}, {load_line.a_mode_2}{load_line.address_2}")
 
-    if error_list != []:
+        current_line += 1
+
+    if error_list == []:
         debug_print("Compiler operation completed successfully.")
     else:
         debug_print(f"Compiler operation completed. {len(error_list)} invalid lines ignored.")

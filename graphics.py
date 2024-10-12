@@ -105,7 +105,6 @@ def create_image_from_state_data(state : list, prev_state : list, field_size : i
         else: continue
         break
 
-
     return new_image
 
 # Places pixel data created in pregenerate_tile on image data
