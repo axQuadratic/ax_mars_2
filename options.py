@@ -4,15 +4,25 @@
 import customtkinter as ctk
 from enum import Enum
 from random import randint
+from copy import deepcopy
 
 class tile_colors(Enum):
     blue = (0, 200, 200)
     red = (200, 0, 0)
     green = (0, 200, 0)
     yellow = (200, 200, 0)
+    orange = (255, 150, 0)
+    purple = (110, 0, 255)
+    pink = (255, 110, 230)
+    gray = (200, 200, 200)
     white = (255, 255, 255)
     black = (10, 10, 10)
     highlight = (25, 66, 113)
+
+# RGB to hex algorithm straight from Stackoverflow
+def get_tile_hex_color(color : str):
+    rgb = tile_colors[color].value
+    return "#{:02x}{:02x}{:02x}".format(rgb[0], rgb[1], rgb[2])
 
 # The below lists are compiled from ICWS 94: https://corewar.co.uk/standards/icws94.htm
 addressing_modes = [
@@ -68,15 +78,14 @@ prev_state_data = []
 
 state_image = None
 resized_state_image = None
+render_queue = []
 
 speed_levels = [1, 2, 3, 4, 5, 10, 25, 50, 75, 100]
-
-render_queue = []
 
 # Setup menu
 
 def apply_setup(window, label, core_size, max_cycles, max_length, random_core):
-    global field_size, max_cycle_count, max_program_length
+    global field_size, max_cycle_count, max_program_length, warriors
 
     # Error checking
     try:
@@ -93,7 +102,7 @@ def apply_setup(window, label, core_size, max_cycles, max_length, random_core):
         label.configure(text="One or more parameters has an invalid value")
         return
     
-    if core_size < max_length * len(warriors):
+    if core_size < max_length * len(warriors_temp):
         label.configure(text="Core size cannot be smaller than max. warrior length * warrior count")
         return
     
@@ -101,8 +110,7 @@ def apply_setup(window, label, core_size, max_cycles, max_length, random_core):
     max_cycle_count = max_cycles
     max_program_length = max_length
 
-    for warrior in warriors_temp:
-        warriors.append(Warrior(len(warriors) + 1, len(warriors), "blue", warrior.raw_data, warrior.load_file))
+    warriors = deepcopy(warriors_temp)
     
     window.destroy()
     render_queue.append(state_data) # The core viewer, if it is open, needs to be updated

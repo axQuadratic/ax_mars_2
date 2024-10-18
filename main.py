@@ -9,6 +9,7 @@ from ctypes import windll
 from random import randint
 from time import sleep
 from pyperclip import copy
+from copy import deepcopy
 import graphics
 import options as o
 import compiler
@@ -26,6 +27,10 @@ o.root.title("axMARS 2.0")
 state_window = None
 
 render_thread = None
+
+# These are only used by the Redcode editor, but must be global as they need to be tracked between functions
+current_warrior = None
+current_edit_id = None
 
 def main():
     global state_window_button, setup_button, options_button, speed_display, pause_button
@@ -87,11 +92,15 @@ def toggle_pause():
     pass
 
 def open_setup_menu():
+    global warrior_list_container
+
     setup_window = ctk.CTkToplevel(o.root)
     setup_window.title("Match Options")
     setup_window.geometry("500x275")
     setup_window.resizable(False, False)
     setup_window.grab_set()
+
+    o.warriors_temp = deepcopy(o.warriors) # Reset all unsaved warriors
 
     random_core = ctk.IntVar()
 
@@ -153,16 +162,22 @@ def open_setup_menu():
     max_cycle_input.insert(0, o.max_cycle_count)
     max_length_input.insert(0, o.max_program_length)
 
-    # Display all warriors in order
+    display_warriors()
+
+def display_warriors():
+    for child in warrior_list_container.winfo_children():
+        child.destroy()
+
     warrior_var = ctk.IntVar(value=0)
     i = 0
     for warrior in o.warriors_temp:
-        new_warrior = ctk.CTkRadioButton(warrior_list_container, width=140, height=20, text=warrior.name, variable=warrior_var, value=i)
+        display_color = o.get_tile_hex_color(warrior.color)
+        new_warrior = ctk.CTkRadioButton(warrior_list_container, width=140, height=30, fg_color=display_color, hover_color=display_color, text=warrior.name, variable=warrior_var, value=i)
         new_warrior.grid(row=i, column=0, sticky="nsew")
         i += 1
 
 def open_redcode_window(warrior):
-    global compiled_display
+    global current_warrior, current_edit_id, redcode_window, compiled_display, save_button, clip_button
 
     redcode_window = ctk.CTkToplevel(o.root)
     redcode_window.geometry("800x600")
@@ -178,8 +193,8 @@ def open_redcode_window(warrior):
 
     button_container = ctk.CTkFrame(redcode_window)
     debug_button = ctk.CTkCheckBox(button_container, text="Enable debug output (slow)")
-    compile_button = ctk.CTkButton(button_container, command=lambda: create_warrior(redcode_input.get("1.0", "end-1c").split("\n"), bool(debug_button.get())), text="Compile")
-    save_button = ctk.CTkButton(button_container, text="Add to Core", state=ctk.DISABLED)
+    compile_button = ctk.CTkButton(button_container, command=lambda: compile_warrior(redcode_input.get("1.0", "end-1c").split("\n"), bool(debug_button.get())), text="Compile")
+    save_button = ctk.CTkButton(button_container, text="Add to Core", state=ctk.DISABLED, command=add_current_warrior_to_list)
     export_button = ctk.CTkButton(button_container, text="Save as file [WIP]", state=ctk.DISABLED)
     clip_button = ctk.CTkButton(button_container, text="Copy to clipboard", command=lambda: copy(compiled_display.cget("text")), state=ctk.DISABLED)
 
@@ -210,37 +225,58 @@ def open_redcode_window(warrior):
 
     if warrior is not None:
         # Editing an extant warrior; needs to insert its data
+        current_warrior = warrior
+        current_edit_id = warrior.id
         redcode_input.insert(0, warrior.raw_data)
-        create_warrior(warrior.raw_data)
+        compile_warrior(warrior.raw_data, False)
+    else:
+        current_warrior = None
+        current_edit_id = None
 
 # Creates a warrior from text data entered by user
-def create_warrior(data, debug):
+def compile_warrior(data, debug):
+    global current_warrior
+
     load_file, error_list = compiler.compile_load_file(data, debug)
     if error_list != []:
         # Errors are present
-        compiled_display.configure(text_color="red", text=f"({len(error_list)} errors)\n{'\n'.join(error_list)}")
+        compiled_display.configure(text_color="red", font=("Consolas", 12), text=f"({len(error_list)} errors)\n{'\n'.join(error_list)}")
+
+        save_button.configure(state=ctk.DISABLED)
+        clip_button.configure(state=ctk.DISABLED)
         return
 
     load_text = []
     for line in load_file:
-        instruction = ""
-        instruction += line.opcode
-        instruction += "." + line.modifier
-        instruction += " " + line.a_mode_1
-        instruction += line.address_1
-        instruction += ", " + line.a_mode_2
-        instruction += line.address_2
-
-        load_text.append(instruction)
+        load_text.append(f"{line.opcode}.{line.modifier} {line.a_mode_1}{line.address_1}, {line.a_mode_2}{line.address_2}")
 
     if load_text == []:
         compiled_display.configure(text_color="white", text="No readable lines")
         return
 
-    compiled_display.configure(text_color="white", text="\n".join(load_text))
+    compiled_display.configure(text_color="white", font=("Consolas", 14), text="\n".join(load_text))
 
-    warrior = o.Warrior(len(o.warriors) + 1, len(o.warriors), "blue", data, load_file)
-    o.warriors_temp.append(warrior)
+    save_button.configure(state=ctk.NORMAL)
+    clip_button.configure(state=ctk.NORMAL)
+
+    warrior_id = len(o.warriors_temp)
+    warrior_color = [v.name for v in o.tile_colors][warrior_id % 8] # Loop through every main colour in tile_colors
+
+    # This parameter is used by the below function
+    current_warrior = o.Warrior(warrior_id + 1, warrior_id, warrior_color, data, load_file)
+
+def add_current_warrior_to_list():
+    # This function uses global parameters set at compile-time
+    if current_edit_id is None:
+        o.warriors_temp.append(current_warrior)
+    else:
+        # If current_edit_id is set, overwrite the warrior of that id
+        for i in range(len(o.warriors_temp)):
+            if o.warriors_temp[i].id == current_edit_id:
+                o.warriors_temp[i] = current_warrior
+    
+    display_warriors()
+    redcode_window.destroy()
 
 def open_state_window():
     global state_window, state_canvas, detail_button
@@ -253,21 +289,13 @@ def open_state_window():
     state_window.protocol("WM_DELETE_WINDOW", close_state_win)
 
     state_canvas = ctk.CTkCanvas(state_window, bg="black")
-
-    #state_canvas.bind("<Motion>", track_mouse_pos)
     
     bottom_bar_container = ctk.CTkFrame(state_window, width=0, height=0)
-    #tile_detail = ctk.CTkLabel(bottom_bar_container, bg_color="gray39", text=f"Address #{'0000' if o.field_size < 10000 else '00000'}")
-    #inst_detail = ctk.CTkLabel(bottom_bar_container, bg_color="gray39", text="DAT.F #0, #0")
-    #cycle_detail = ctk.CTkLabel(bottom_bar_container, bg_color="gray39", text="Cycle 0 / 10000")
     detail_button = ctk.CTkButton(bottom_bar_container, command=open_detail_window, text="Open Detail Viewer")
 
     state_canvas.grid(row=0, column=0, columnspan=2, sticky="nsew")
 
     bottom_bar_container.grid(row=1, column=0, sticky="nsew")
-    #tile_detail.grid(row=0, column=0, sticky="nsew")
-    #inst_detail.grid(row=0, column=2, sticky="nsew")
-    #cycle_detail.grid(row=0, column=4, sticky="nsew")
     detail_button.grid(row=0, column=6, sticky="nsew")
 
     state_window.grid_rowconfigure(0, weight=1)
@@ -284,7 +312,7 @@ def open_state_window():
 def graphics_listener():
     # Always runs in the background; executes the render queue whenever it is non-empty
     while True:
-        sleep(0.1) # Delay to prevent excessive CPU usage
+        sleep(0.05) # Delay to prevent excessive CPU usage
         if o.render_queue == []: continue
         update_state_canvas()
 
@@ -308,31 +336,6 @@ def update_state_canvas():
     state_window.geometry(f"{round(810 / scale_factor)}x{round(o.resized_state_image.height / scale_factor) + 40}")
 
     o.render_queue.pop(0)
-
-# The below code is currently nonfunctional: I have decided to comment it out until I can be bothered to fix it
-"""
-def track_mouse_pos(event):
-    # Recalculate the width in tiles of the field using the same algorithm as the graphics manager
-    e_field_width = graphics.max_field_width if o.field_size <= 10000 else math.ceil(math.sqrt(o.field_size))
-
-    # Calculate mouse position in terms of tiles; note that since the grid is shifted by 5 all events must also be
-    tile_x = math.floor(((event.x + 5) / o.resized_state_image.width) * e_field_width)
-    tile_y = math.floor(((event.y + 5) / o.resized_state_image.width) * e_field_width)
-
-    # Clamp X and Y values
-    if tile_x <= 1: tile_x = 1
-    if tile_x > e_field_width: tile_x = e_field_width
-    if tile_y <= 1: tile_y = 1
-    if tile_y > o.field_size / e_field_width: tile_y = o.field_size / e_field_width
-
-    target_tile = ((tile_y - 1) * e_field_width + tile_x)
-    if target_tile > o.field_size: target_tile = o.field_size
-
-    if o.field_size >= 10000:
-        tile_detail.configure(text=f"Address #{target_tile:05}")
-    else:
-        tile_detail.configure(text=f"Address #{target_tile:04}")
-"""
         
 def close_state_win():
     state_window_button.configure(state=ctk.NORMAL, text="View Core")
@@ -353,7 +356,7 @@ def open_detail_window():
 
     search_value = ctk.StringVar()
     search_bar = ctk.CTkEntry(detail_window, textvariable=search_value, placeholder_text="Jump to Address...")
-    search_value.trace_add("write", detail_search)
+    search_value.trace_add("write", lambda _a, _b, _c: update_detail_window(search_value.get(), True))
     data_container = ctk.CTkFrame(detail_window, fg_color="black")
     options_container = ctk.CTkFrame(detail_window, width=30)
 
@@ -412,15 +415,10 @@ def update_detail_window(target, from_search):
     detail_target = target
     for i in range(len(info_labels)):
         info_labels[i].configure(text=f"#{str(detail_target + i + 1).zfill(4 if o.field_size < 10000 else 5)}: {o.state_data[detail_target + i].instruction}")
-        info_labels[i].configure(text_color=graphics.tile_colors(o.state_data[detail_target + i].color) if o.state_data[detail_target + i].color != "black" and o.state_data[detail_target + i].color != "highlight" else "white")
+        info_labels[i].configure(text_color=graphics.tile_colors(o.state_data[detail_target + i].color) if o.state_data[detail_target + i].color != "black" else "white")
         o.state_data[detail_target + i].highlighted = True
 
     o.render_queue.append(o.state_data)
-
-# Wrapper callback for the search bar trace
-def detail_search(w, t, f):
-    global search_value
-    update_detail_window(search_value.get(), True)
 
 def close_detail_win():
     for i in range(len(o.state_data)):

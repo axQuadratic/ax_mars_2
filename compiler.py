@@ -43,7 +43,7 @@ def compile_load_file(data, debug):
         if len(attributes) > 4:
             # Too many attributes!
             debug_print("Compiler error detected. Aborting...")
-            error_list.append(f"Bad instruction at '{line.strip()}' (too many attributes)")
+            error_list.append(f"Bad instruction at '{line.strip()}'\n(too many attributes)")
             load_data.append(load_line)
             continue
         
@@ -62,7 +62,7 @@ def compile_load_file(data, debug):
             if len(attributes) == 0:
                 # Label has no instruction
                 debug_print("Compiler error detected. Aborting...")
-                error_list.append(f"Bad instruction at '{line.strip()}' (invalid opcode)")
+                error_list.append(f"Bad instruction at '{line.strip()}'\n(invalid opcode)")
                 load_data.append(load_line)
                 continue
 
@@ -75,9 +75,13 @@ def compile_load_file(data, debug):
         if opcode_data[0] not in o.opcodes or (len(opcode_data) > 1 and opcode_data[1] not in o.modifiers) or len(opcode_data) > 2:
             # Bad opcode
             debug_print("Compiler error detected. Aborting...")
-            error_list.append(f"Bad instruction at '{line.strip()}' (invalid opcode)")
+            error_list.append(f"Bad instruction at '{line.strip()}'\n(invalid opcode)")
             load_data.append(load_line)
             continue
+        if opcode_data[0] == "LDP" or opcode_data[0] == "STP":
+            # P-space is not yet implemented
+            debug_print("Compiler error detected. Aborting...")
+            error_list.append(f"Bad instruction at '{line.strip()}'\n(P-space not supported)")
 
         if load_line.modifier is not None:
             debug_print(f"Valid opcode and modifier confirmed: {load_line.opcode}.{load_line.modifier}")
@@ -123,7 +127,7 @@ def compile_load_file(data, debug):
         # Adresses must be comma separated according to ICWS 94
         if list(att_1)[-1] != "," and not second_attribute_unset:
             debug_print("Compiler error detected. Aborting...")
-            error_list.append(f"Bad instruction at '{line.strip()}' (invalid adress)")
+            error_list.append(f"Bad instruction at '{line.strip()}'\n(invalid adress)")
             load_data.append(load_line)
             continue
 
