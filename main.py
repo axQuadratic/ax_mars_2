@@ -41,7 +41,7 @@ def main():
 
     # Create UI elements for the main window
     top_container = ctk.CTkFrame(o.root)
-    state_window_button = ctk.CTkButton(top_container, text="View Core", command=open_state_window)
+    state_window_button = ctk.CTkButton(top_container, text="No Core Loaded", command=open_state_window, state=ctk.DISABLED)
     pspace_button = ctk.CTkButton(top_container, text="View P-Space [WIP]", state=ctk.DISABLED)
     setup_button = ctk.CTkButton(top_container, text="Setup", command=open_setup_menu)
     help_button = ctk.CTkButton(top_container, text="Help [WIP]", state=ctk.DISABLED)
@@ -125,7 +125,7 @@ def open_setup_menu():
     max_length_input = ctk.CTkEntry(misc_container, placeholder_text="Length...")
 
     error_label = ctk.CTkLabel(setup_window, text_color="red", text="")
-    apply_button = ctk.CTkButton(setup_window, text="Apply", command=lambda: o.apply_setup(setup_window, error_label, core_size_input.get(), max_cycle_input.get(), max_length_input.get(), random_core.get()))
+    apply_button = ctk.CTkButton(setup_window, text="Apply", command=lambda: o.apply_setup(setup_window, error_label, state_window_button, core_size_input.get(), max_cycle_input.get(), max_length_input.get(), random_core.get()))
 
     warrior_container.grid(row=0, column=0, rowspan=2, sticky="nsew")
     core_size_container.grid(row=0, column=2, sticky="new")
@@ -172,7 +172,11 @@ def display_warriors():
     i = 0
     for warrior in o.warriors_temp:
         display_color = o.get_tile_hex_color(warrior.color)
-        new_warrior = ctk.CTkRadioButton(warrior_list_container, width=140, height=30, fg_color=display_color, hover_color=display_color, text=warrior.name, variable=warrior_var, value=i)
+        if len(warrior.name) > 13:
+            display_name = warrior.name[0:13] + "..."
+        else:
+            display_name = warrior.name
+        new_warrior = ctk.CTkRadioButton(warrior_list_container, width=140, height=30, fg_color=display_color, hover_color=display_color, font=("Consolas", 13), text=display_name, variable=warrior_var, value=i)
         new_warrior.grid(row=i, column=0, sticky="nsew")
         i += 1
 
@@ -237,7 +241,7 @@ def open_redcode_window(warrior):
 def compile_warrior(data, debug):
     global current_warrior
 
-    load_file, error_list = compiler.compile_load_file(data, debug)
+    current_warrior, error_list = compiler.compile_load_file(data, debug)
     if error_list != []:
         # Errors are present
         compiled_display.configure(text_color="red", font=("Consolas", 12), text=f"({len(error_list)} errors)\n{'\n'.join(error_list)}")
@@ -247,23 +251,22 @@ def compile_warrior(data, debug):
         return
 
     load_text = []
-    for line in load_file:
-        load_text.append(f"{line.opcode}.{line.modifier} {line.a_mode_1}{line.address_1}, {line.a_mode_2}{line.address_2}")
+    for line in current_warrior.load_file:
+        load_text.append(o.parse_instruction_to_text(line))
 
     if load_text == []:
-        compiled_display.configure(text_color="white", text="No readable lines")
+        compiled_display.configure(text_color=("black", "white"), text="No readable lines")
         return
 
-    compiled_display.configure(text_color="white", font=("Consolas", 14), text="\n".join(load_text))
+    compiled_display.configure(text_color=("black", "white"), font=("Consolas", 14), text="\n".join(load_text))
 
     save_button.configure(state=ctk.NORMAL)
     clip_button.configure(state=ctk.NORMAL)
 
-    warrior_id = len(o.warriors_temp)
-    warrior_color = [v.name for v in o.tile_colors][warrior_id % 8] # Loop through every main colour in tile_colors
-
-    # This parameter is used by the below function
-    current_warrior = o.Warrior(warrior_id + 1, warrior_id, warrior_color, data, load_file)
+    # The current_warrior variable is used in the below function
+    current_warrior.id = len(o.warriors_temp)
+    current_warrior.color = [v.name for v in o.tile_colors][current_warrior.id % 8] # Loop through every main colour in tile_colors
+    current_warrior.raw_data = data
 
 def add_current_warrior_to_list():
     # This function uses global parameters set at compile-time
@@ -274,7 +277,7 @@ def add_current_warrior_to_list():
         for i in range(len(o.warriors_temp)):
             if o.warriors_temp[i].id == current_edit_id:
                 o.warriors_temp[i] = current_warrior
-    
+
     display_warriors()
     redcode_window.destroy()
 
@@ -313,6 +316,7 @@ def graphics_listener():
     # Always runs in the background; executes the render queue whenever it is non-empty
     while True:
         sleep(0.05) # Delay to prevent excessive CPU usage
+
         if o.render_queue == []: continue
         update_state_canvas()
 
@@ -323,6 +327,8 @@ def update_state_canvas():
     if state_window is None or not state_window.winfo_exists(): return
     # Ignore if function is called while the render queue is empty
     if o.render_queue == []: return
+    # If core is unloaded while window is open, close it
+    if o.state_data == []: state_window.destroy()
 
     o.state_image = graphics.create_image_from_state_data(o.state_data, o.prev_state_data, o.field_size, o.state_image)
     o.resized_state_image = o.state_image.resize((800, round(o.state_image.height * (800 / o.state_image.width))))
@@ -414,8 +420,9 @@ def update_detail_window(target, from_search):
 
     detail_target = target
     for i in range(len(info_labels)):
-        info_labels[i].configure(text=f"#{str(detail_target + i + 1).zfill(4 if o.field_size < 10000 else 5)}: {o.state_data[detail_target + i].instruction}")
-        info_labels[i].configure(text_color=graphics.tile_colors(o.state_data[detail_target + i].color) if o.state_data[detail_target + i].color != "black" else "white")
+        info_labels[i].configure(text=f"#{str(detail_target + i + 1).zfill(4 if o.field_size < 10000 else 5)}: {o.parse_instruction_to_text(o.state_data[detail_target + i].instruction)}")
+        info_labels[i].configure(text_color=o.get_tile_hex_color(o.state_data[detail_target + i].color) if o.state_data[detail_target + i].color != "black" else "white")
+        info_labels[i].configure(font=("Consolas", 15))
         o.state_data[detail_target + i].highlighted = True
 
     o.render_queue.append(o.state_data)

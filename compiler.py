@@ -11,13 +11,18 @@ class Label:
 
 labels = []
 
+# Not currently implemented
+constants = {
+    "CORESIZE": 8000
+}
+
 debug_enabled = False
 
 def compile_load_file(data, debug):
     global labels, debug_enabled
 
     if data == []: return
-    load_data = []
+    new_warrior = o.Warrior("Nameless", None, None, None, [])
     error_list = []
 
     if debug: debug_enabled = True
@@ -40,11 +45,24 @@ def compile_load_file(data, debug):
             # Line is empty
             debug_print("Line is empty, continuing...")
             continue
+
+        if attributes[0][0] == ";":
+            # Line is a comment
+            if attributes[0][1:len(attributes[0])] == "name":
+                new_warrior.name = " ".join(attributes[1:len(attributes)])
+            elif attributes[1] == "name":
+                new_warrior.name = " ".join(attributes[2:len(attributes)])
+            else:
+                continue
+
+            debug_print(f";name parameter identified; warrior's name is {new_warrior.name}")
+            continue
+
         if len(attributes) > 4:
             # Too many attributes!
             debug_print("Compiler error detected. Aborting...")
             error_list.append(f"Bad instruction at '{line.strip()}'\n(too many attributes)")
-            load_data.append(load_line)
+            new_warrior.load_file.append(load_line)
             continue
         
         initial_data = attributes[0].upper().split(".")
@@ -63,7 +81,7 @@ def compile_load_file(data, debug):
                 # Label has no instruction
                 debug_print("Compiler error detected. Aborting...")
                 error_list.append(f"Bad instruction at '{line.strip()}'\n(invalid opcode)")
-                load_data.append(load_line)
+                new_warrior.load_file.append(load_line)
                 continue
 
         opcode_data = attributes[0].upper().split(".")
@@ -76,7 +94,7 @@ def compile_load_file(data, debug):
             # Bad opcode
             debug_print("Compiler error detected. Aborting...")
             error_list.append(f"Bad instruction at '{line.strip()}'\n(invalid opcode)")
-            load_data.append(load_line)
+            new_warrior.load_file.append(load_line)
             continue
         if opcode_data[0] == "LDP" or opcode_data[0] == "STP":
             # P-space is not yet implemented
@@ -94,7 +112,7 @@ def compile_load_file(data, debug):
             att_1 = None
         else:
             # All other address-related blocks fall through if these are set here 
-            a_mode_1 = "$" if load_line.opcode != "DAT" else "#"
+            a_mode_1 = "$"
             att_1 = "0,"
             debug_print(f"No A-field specified, assuming {a_mode_1}0...")
         
@@ -103,21 +121,21 @@ def compile_load_file(data, debug):
             a_mode_2 = attributes[2][0:1]
             att_2 = None
         else:
-            a_mode_2 = "$" if load_line.opcode != "DAT" else "#"
+            a_mode_2 = "$"
             att_2 = "0"
             second_attribute_unset = True
             debug_print(f"No B-field specified, assuming {a_mode_2}0...")
 
         if a_mode_1 not in o.addressing_modes:
             # No addressing mode is present
-            debug_print(f"No addressing mode detected in A-field. Assuming {'relative' if load_line.opcode != 'DAT' else 'immediate'}...")
-            a_mode_1 = "$" if load_line.opcode != "DAT" else "#"
+            debug_print(f"No addressing mode detected in A-field. Assuming relative...")
+            a_mode_1 = "$"
             att_1 = attributes[1]
         elif att_1 is None:
             att_1 = attributes[1][1:len(attributes[1])]
         if a_mode_2 not in o.addressing_modes:
-            debug_print(f"No addressing mode detected in B-field. Assuming {'relative' if load_line.opcode != 'DAT' else 'immediate'}...")
-            a_mode_2 = "$" if load_line.opcode != "DAT" else "#"
+            debug_print(f"No addressing mode detected in B-field. Assuming relative...")
+            a_mode_2 = "$"
             att_2 = attributes[2]
         elif att_2 is None:
             att_2 = attributes[2][1:len(attributes[2])]
@@ -128,7 +146,7 @@ def compile_load_file(data, debug):
         if list(att_1)[-1] != "," and not second_attribute_unset:
             debug_print("Compiler error detected. Aborting...")
             error_list.append(f"Bad instruction at '{line.strip()}'\n(invalid adress)")
-            load_data.append(load_line)
+            new_warrior.load_file.append(load_line)
             continue
 
         # Remove trailing commas
@@ -145,8 +163,8 @@ def compile_load_file(data, debug):
             load_line.modifier = get_default_modifier(load_line)
             debug_print(f"Processing has determined opcode's modifier, result: {load_line.opcode}.{load_line.modifier}")
 
-        load_data.append(load_line)
-        debug_print(f"Line completed. Load file output: {load_line.opcode}.{load_line.modifier} {load_line.a_mode_1}{load_line.address_1}, {load_line.a_mode_2}{load_line.address_2}")
+        new_warrior.load_file.append(load_line)
+        debug_print(f"Line completed. Load file output: " + o.parse_instruction_to_text(load_line))
 
         current_line += 1
 
@@ -155,7 +173,7 @@ def compile_load_file(data, debug):
     else:
         debug_print(f"Compiler operation completed. {len(error_list)} invalid lines ignored.")
 
-    return load_data, error_list
+    return new_warrior, error_list
 
 def get_default_modifier(instruction : o.Instruction):
     # If no modifer is specifed in raw data, it is determined according to these rules
