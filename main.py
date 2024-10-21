@@ -21,7 +21,7 @@ ctk.set_default_color_theme("dark-blue")
 
 o.root.geometry("450x200")
 o.root.resizable(False, False)
-o.root.title("axMARS 2.0")
+o.root.title("Tailwind v0.4")
 
 # This needs to be declared here as its existence is required by several functions
 state_window = None
@@ -186,7 +186,7 @@ def open_redcode_window(warrior):
     redcode_window = ctk.CTkToplevel(o.root)
     redcode_window.geometry("800x600")
     redcode_window.resizable(False, False)
-    redcode_window.title("axMARS 2.0 Redcode Editor")
+    redcode_window.title("Tailwind Redcode Editor")
     redcode_window.grab_set()
 
     redcode_input = ctk.CTkTextbox(redcode_window, font=("Consolas", 12), height=580, wrap=ctk.NONE)
@@ -442,10 +442,10 @@ def open_options_menu():
     options_window.title("Program Options")
     options_window.grab_set()
 
-    credits_text = "axMARS 2.0\n\nDeveloped by Nils K (Quadratic) for Indirect UF\n\nInspired by pMARS, CoreWin and the defunct corewar.io\n\nLibraries used: customtkinter, PIL, pyperclip & dependencies\n\nProbably dedicated to someone, IDK"
+    credits_text = "Developed by Nils K (Quadratic) for Indirect UF\nInspired by pMARS, CoreWin and the defunct corewar.io\nLibraries used: customtkinter, PIL, pyperclip & dependencies\nProbably dedicated to someone, IDK"
 
     dark_mode_toggle = ctk.CTkCheckBox(options_window, command=o.toggle_dark_mode, text="Dark Mode")
-    credits_button = ctk.CTkButton(options_window, command=lambda: showinfo(title="Credits", message=credits_text), text="Credits")
+    credits_button = ctk.CTkButton(options_window, command=lambda: showinfo(title="Tailwind Redcode Simulator: Credits", message=credits_text), text="Credits")
 
     dark_mode_toggle.grid(row=0, column=0, sticky="nsew")
     credits_button.grid(row=1, column=0, sticky="ns")
