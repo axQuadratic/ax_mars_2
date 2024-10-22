@@ -4,7 +4,6 @@
 import customtkinter as ctk
 from enum import Enum
 from random import randint
-from copy import deepcopy
 
 class tile_colors(Enum):
     blue = (0, 200, 200)
@@ -23,6 +22,12 @@ class tile_colors(Enum):
 def get_tile_hex_color(color : str):
     rgb = tile_colors[color].value
     return "#{:02x}{:02x}{:02x}".format(rgb[0], rgb[1], rgb[2])
+
+# Quick algorithm for getting a main colour based on a number
+def get_tile_color_from_id(id : int, cross : bool = False):
+    color = [v.name for v in tile_colors][id % 8]
+    if cross: color = "cross_" + color
+    return color
 
 # The below lists are compiled from ICWS 94: https://corewar.co.uk/standards/icws94.htm
 addressing_modes = [
@@ -47,6 +52,12 @@ class Instruction:
         self.a_mode_2 = a_mode_2
         self.address_2 = address_2
 
+    # Necessary to allow comparisons between instances by attributes
+    def __eq__(self, other):
+        c1 = self.label == other.label and self.opcode == other.opcode and self.modifier == other.modifier
+        c2 = self.a_mode_1 == other.a_mode_1 and self.address_1 == other.address_1 and self.a_mode_2 == other.a_mode_2 and self.address_2 == other.address_2
+        return c1 and c2
+
 class Warrior:
     def __init__(self, name : str, id : int, color : str, raw_data : list, load_file : list):
         self.name = name
@@ -55,6 +66,11 @@ class Warrior:
         self.raw_data = raw_data
         self.load_file = load_file
 
+class Process:
+    def __init__(self, location : int, warrior : int):
+        self.location = location
+        self.warrior = warrior
+
 class Tile:
     def __init__(self, warrior : int, color : str, instruction : Instruction, highlighted : bool):
         self.warrior = warrior
@@ -62,10 +78,15 @@ class Tile:
         self.instruction = instruction
         self.highlighted = highlighted
 
+    # See Instruction
+    def __eq__(self, other):
+        return self.warrior == other.warrior and self.color == other.color and self.instruction == other.instruction and self.highlighted == other.highlighted
+
 # This is declared here, so it can be accessed by other files
 root = ctk.CTk()
 
 play_speed = 1
+paused = True
 field_size = 8000
 max_cycle_count = 80000
 max_program_length = 100
@@ -82,7 +103,7 @@ state_image = None
 resized_state_image = None
 render_queue = []
 
-speed_levels = [1, 2, 3, 4, 5, 10, 25, 50, 75, 100]
+speed_levels = [1, 2, 5, 10, 25, 50, 100, 200]
 
 def initialize_core():
     global state_data, prev_state_data, cur_cycle
@@ -112,46 +133,11 @@ def initialize_core():
             state_data[i % field_size] = Tile(warrior.id, warrior.color, line, False)
             i += 1
 
+        # Add warrior to process queue
+        process_queue.append(Process(warrior_pos, warrior.id))
+
 def parse_instruction_to_text(instruction : Instruction):
     return f"{instruction.opcode}.{instruction.modifier} {instruction.a_mode_1}{instruction.address_1}, {instruction.a_mode_2}{instruction.address_2}"
-
-# Setup menu
-
-def apply_setup(window, label, state_button, core_size, max_cycles, max_length, random_core):
-    global field_size, max_cycle_count, max_program_length, warriors
-
-    # Error checking
-    try:
-        if random_core == 1:
-            core_size = randint(max_length * len(warriors), 20000)
-
-        core_size = int(core_size)
-        max_cycles = int(max_cycles)
-        max_length = int(max_length)
-
-        if core_size <= 0 or max_cycles <= 0 or max_length <= 0:
-            raise Exception
-    except:
-        label.configure(text="One or more parameters has an invalid value")
-        return
-
-    if warriors_temp == []:
-        label.configure(text="Cannot begin a match with no warriors in core")
-        return
-    
-    if core_size < max_length * len(warriors_temp):
-        label.configure(text="Core size cannot be smaller than max. warrior length * warrior count")
-        return
-    
-    field_size = core_size
-    max_cycle_count = max_cycles
-    max_program_length = max_length
-
-    warriors = deepcopy(warriors_temp)
-    initialize_core()
-    state_button.configure(text="View Core", state=ctk.NORMAL)
-    window.destroy()
-    render_queue.append(state_data) # The core viewer, if it is open, needs to be updated
 
 # Options menu
 

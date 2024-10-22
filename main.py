@@ -13,6 +13,7 @@ from copy import deepcopy
 import graphics
 import options as o
 import compiler
+import process
 
 # Global variables are declared in options.py
 
@@ -23,21 +24,24 @@ o.root.geometry("450x200")
 o.root.resizable(False, False)
 o.root.title("axMARS 2.0")
 
-# This needs to be declared here as its existence is required by several functions
+# These need to be declared here as their existence is required by several functions
 state_window = None
+detail_window = None
 
 render_thread = None
+sim_thread = None
 
 # These are only used by the Redcode editor, but must be global as they need to be tracked between functions
 current_warrior = None
 current_edit_id = None
 
 def main():
-    global state_window_button, setup_button, options_button, speed_display, pause_button
+    global render_thread, sim_thread, state_window_button, setup_button, options_button, speed_display, pause_button, one_step_button
 
-    # Start the background render thread
+    # Start the background threads; graphics and simulation
     render_thread = th.Thread(target=graphics_listener)
     render_thread.start()
+    sim_thread = th.Thread(target=process.simulation_clock)
 
     # Create UI elements for the main window
     top_container = ctk.CTkFrame(o.root)
@@ -48,12 +52,12 @@ def main():
     options_button = ctk.CTkButton(top_container, text="Options", command=open_options_menu)
 
     bottom_container = ctk.CTkFrame(o.root)
-    speed_control = ctk.CTkSlider(bottom_container, from_=0, to=9, number_of_steps=9, orientation=ctk.HORIZONTAL, command=change_speed)
+    speed_control = ctk.CTkSlider(bottom_container, from_=0, to=7, number_of_steps=7, orientation=ctk.HORIZONTAL, command=change_speed)
     speed_display = ctk.CTkLabel(bottom_container, text="1x", width=35)
     max_speed_button = ctk.CTkCheckBox(bottom_container, text="Max. Simulation Speed")
     async_button = ctk.CTkCheckBox(bottom_container, text="Asynchronous Rendering")
-    pause_button = ctk.CTkButton(bottom_container, text="Start", command=toggle_pause)
-    one_step_button = ctk.CTkButton(bottom_container, text="Advance One Cycle")
+    pause_button = ctk.CTkButton(bottom_container, text="Start", command=toggle_pause, state=ctk.DISABLED)
+    one_step_button = ctk.CTkButton(bottom_container, text="Advance One Cycle", state=ctk.DISABLED)
 
     top_container.grid(row=0, column=0, sticky="nsew")
     bottom_container.grid(row=2, column=0, sticky="nsew")
@@ -89,10 +93,18 @@ def change_speed(new_speed):
     speed_display.configure(text=f"{o.play_speed}x")
 
 def toggle_pause():
-    pass
+    if o.paused:
+        pause_button.configure(text="Pause")
+        one_step_button.configure(state=ctk.DISABLED)
+        o.paused = False
+    else:
+        pause_button.configure(text="Unpause")
+        one_step_button.configure(state=ctk.NORMAL)
+        o.paused = True
+        o.render_queue.append(True) # Ensure rendering is caught up with state
 
 def open_setup_menu():
-    global warrior_list_container
+    global setup_window, warrior_list_container, error_label
 
     setup_window = ctk.CTkToplevel(o.root)
     setup_window.title("Match Options")
@@ -125,7 +137,7 @@ def open_setup_menu():
     max_length_input = ctk.CTkEntry(misc_container, placeholder_text="Length...")
 
     error_label = ctk.CTkLabel(setup_window, text_color="red", text="")
-    apply_button = ctk.CTkButton(setup_window, text="Apply", command=lambda: o.apply_setup(setup_window, error_label, state_window_button, core_size_input.get(), max_cycle_input.get(), max_length_input.get(), random_core.get()))
+    apply_button = ctk.CTkButton(setup_window, text="Apply", command=lambda: apply_setup(core_size_input.get(), max_cycle_input.get(), max_length_input.get(), random_core.get()))
 
     warrior_container.grid(row=0, column=0, rowspan=2, sticky="nsew")
     core_size_container.grid(row=0, column=2, sticky="new")
@@ -179,6 +191,47 @@ def display_warriors():
         new_warrior = ctk.CTkRadioButton(warrior_list_container, width=140, height=30, fg_color=display_color, hover_color=display_color, font=("Consolas", 13), text=display_name, variable=warrior_var, value=i)
         new_warrior.grid(row=i, column=0, sticky="nsew")
         i += 1
+
+def apply_setup(core_size, max_cycles, max_length, random_core):
+    # Applies match settings using inputs
+
+    # Error checking
+    try:
+        if random_core == 1:
+            core_size = randint(max_length * len(o.warriors), 20000)
+
+        core_size = int(core_size)
+        max_cycles = int(max_cycles)
+        max_length = int(max_length)
+
+        if core_size <= 0 or max_cycles <= 0 or max_length <= 0:
+            raise Exception
+    except:
+        error_label.configure(text="One or more parameters has an invalid value")
+        return
+
+    if o.warriors_temp == []:
+        error_label.configure(text="Cannot begin a match with no warriors in core")
+        return
+    
+    if core_size < max_length * len(o.warriors_temp):
+        error_label.configure(text="Core size cannot be smaller than max. warrior length * warrior count")
+        return
+    
+    # Save/reset data in preparation for match
+    o.field_size = core_size
+    o.max_cycle_count = max_cycles
+    o.max_program_length = max_length
+
+    o.warriors = deepcopy(o.warriors_temp)
+    o.initialize_core()
+    state_window_button.configure(text="View Core", state=ctk.NORMAL)
+    pause_button.configure(text="Start", state=ctk.NORMAL)
+    one_step_button.configure(state=ctk.NORMAL)
+    setup_window.destroy()
+
+    o.render_queue = [True] # The core viewer, if it is open, needs to be updated
+    sim_thread.start() # Begin simulation
 
 def open_redcode_window(warrior):
     global current_warrior, current_edit_id, redcode_window, compiled_display, save_button, clip_button
@@ -265,7 +318,7 @@ def compile_warrior(data, debug):
 
     # The current_warrior variable is used in the below function
     current_warrior.id = len(o.warriors_temp)
-    current_warrior.color = [v.name for v in o.tile_colors][current_warrior.id % 8] # Loop through every main colour in tile_colors
+    current_warrior.color = o.get_tile_color_from_id(current_warrior.id)
     current_warrior.raw_data = data
 
 def add_current_warrior_to_list():
@@ -310,7 +363,7 @@ def open_state_window():
     bottom_bar_container.grid_columnconfigure([1, 3], weight=1)
     bottom_bar_container.grid_columnconfigure(5, weight=20)
 
-    o.render_queue.append(o.state_data)
+    o.render_queue = [True]
 
 def graphics_listener():
     # Always runs in the background; executes the render queue whenever it is non-empty
@@ -342,6 +395,9 @@ def update_state_canvas():
     state_window.geometry(f"{round(810 / scale_factor)}x{round(o.resized_state_image.height / scale_factor) + 40}")
 
     o.render_queue.pop(0)
+    
+    # Copy updates to the previous state data
+    o.prev_state_data = deepcopy(o.state_data)
         
 def close_state_win():
     state_window_button.configure(state=ctk.NORMAL, text="View Core")
@@ -368,7 +424,7 @@ def open_detail_window():
 
     info_labels = []
     for i in range(10):
-        info_labels.append(ctk.CTkLabel(data_container, text_color="white", text=f"#{str(i + 1).zfill(4 if o.field_size < 10000 else 5)}: DAT.F #0, #0"))
+        info_labels.append(ctk.CTkLabel(data_container))
 
     up_ten_button = ctk.CTkButton(options_container, text="-10", width=30, command=lambda: update_detail_window(detail_target - 10, False))
     up_one_button = ctk.CTkButton(options_container, text="↑", width=30, command=lambda: update_detail_window(detail_target - 1, False))
@@ -405,7 +461,7 @@ def update_detail_window(target, from_search):
 
     if type(target) != int:
         # Target value comes from search bar
-        try: target = int(target) - 1
+        try: target = int(target)
         except: return
 
     if target < 0:
@@ -420,17 +476,17 @@ def update_detail_window(target, from_search):
 
     detail_target = target
     for i in range(len(info_labels)):
-        info_labels[i].configure(text=f"#{str(detail_target + i + 1).zfill(4 if o.field_size < 10000 else 5)}: {o.parse_instruction_to_text(o.state_data[detail_target + i].instruction)}")
+        info_labels[i].configure(text=f"#{str(detail_target + i).zfill(4 if o.field_size < 10000 else 5)}: {o.parse_instruction_to_text(o.state_data[detail_target + i].instruction)}")
         info_labels[i].configure(text_color=o.get_tile_hex_color(o.state_data[detail_target + i].color) if o.state_data[detail_target + i].color != "black" else "white")
         info_labels[i].configure(font=("Consolas", 15))
         o.state_data[detail_target + i].highlighted = True
 
-    o.render_queue.append(o.state_data)
+    o.render_queue = [True]
 
 def close_detail_win():
     for i in range(len(o.state_data)):
         o.state_data[i].highlighted = False
-    o.render_queue = [o.state_data]
+    o.render_queue = [True]
     try: detail_button.configure(state=ctk.NORMAL, text="Open Detail Viewer")
     except: pass
     detail_window.destroy()

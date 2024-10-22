@@ -85,7 +85,7 @@ def create_image_from_state_data(state : list, prev_state : list, field_size : i
         new_image = Image.new("RGB", (a_max_field_width * tile_size, row_count * tile_size))
     else:
         new_image = prev_image
-    if state == [] or state == prev_state: return new_image # No core is initialized or core is unchanged from previous iteration
+    if state == []: return new_image # No core is initialized
 
     # Draw the image by placing pregenerated tiles as needed
     img_data = new_image.load()
