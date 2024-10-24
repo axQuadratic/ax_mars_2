@@ -16,7 +16,7 @@ class tile_colors(Enum):
     gray = (200, 200, 200)
     white = (255, 255, 255)
     black = (10, 10, 10)
-    highlight = (25, 66, 113)
+    highlight = (31, 83, 141)
 
 # RGB to hex algorithm straight from Stackoverflow
 def get_tile_hex_color(color : str):
@@ -107,6 +107,7 @@ resized_state_image = None
 render_queue = []
 
 speed_levels = [1, 2, 5, 10, 25, 50, 100, 200]
+deghost_button_enabled = False
 
 def initialize_core():
     global state_data, prev_state_data, cur_cycle
@@ -149,3 +150,8 @@ def toggle_dark_mode():
         ctk.set_appearance_mode("dark")
     else:
         ctk.set_appearance_mode("light")
+
+def toggle_deghost():
+    global deghost_button_enabled
+
+    deghost_button_enabled = not deghost_button_enabled

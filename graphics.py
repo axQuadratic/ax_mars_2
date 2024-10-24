@@ -87,8 +87,6 @@ def create_image_from_state_data(state : list, prev_state : list, field_size : i
         new_image = prev_image
     if state == []: return new_image # No core is initialized
 
-    print("--")
-
     # Draw the image by placing pregenerated tiles as needed
     img_data = new_image.load()
     current_tile = 0
