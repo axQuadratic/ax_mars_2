@@ -81,6 +81,9 @@ class Tile:
     # See Instruction
     def __eq__(self, other):
         return self.warrior == other.warrior and self.color == other.color and self.instruction == other.instruction and self.highlighted == other.highlighted
+    
+    def __ne__(self, other):
+        return self.warrior != other.warrior or self.color != other.color or self.instruction != other.instruction or self.highlighted != other.highlighted
 
 # This is declared here, so it can be accessed by other files
 root = ctk.CTk()

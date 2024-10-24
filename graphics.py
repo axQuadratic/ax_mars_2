@@ -87,6 +87,8 @@ def create_image_from_state_data(state : list, prev_state : list, field_size : i
         new_image = prev_image
     if state == []: return new_image # No core is initialized
 
+    print("--")
+
     # Draw the image by placing pregenerated tiles as needed
     img_data = new_image.load()
     current_tile = 0
@@ -98,6 +100,7 @@ def create_image_from_state_data(state : list, prev_state : list, field_size : i
             elif state[current_tile] != prev_state[current_tile]:
                 # This step takes up quite a bit of CPU time, hence why it is skipped if the image would be unchanged
                 img_data = draw_tile(img_data, x * tile_size, y * tile_size, state[current_tile].color if not state[current_tile].highlighted else "highlight")
+
             current_tile += 1
             if current_tile >= field_size: break
 

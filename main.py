@@ -35,6 +35,8 @@ sim_thread = None
 current_warrior = None
 current_edit_id = None
 
+detail_window_updating = False
+
 def main():
     global render_thread, sim_thread, state_window_button, setup_button, options_button, speed_display, pause_button, one_step_button
 
@@ -370,7 +372,7 @@ def graphics_listener():
     while True:
         sleep(0.05) # Delay to prevent excessive CPU usage
 
-        if o.render_queue == []: continue
+        if o.render_queue == [] or detail_window_updating: continue
         update_state_canvas()
 
 def update_state_canvas():
@@ -404,7 +406,7 @@ def close_state_win():
     state_window.destroy()
 
 def open_detail_window():
-    global detail_window, detail_target, search_value, info_labels
+    global detail_window, detail_target, search_value, info_labels, up_one_button, up_ten_button, down_one_button, down_ten_button
 
     detail_target = 0
 
@@ -454,7 +456,9 @@ def open_detail_window():
     update_detail_window(detail_target, False)
 
 def update_detail_window(target, from_search):
-    global detail_target, info_labels, search_value
+    global detail_window_updating, detail_target, info_labels, search_value
+
+    detail_window_updating = True
 
     if not from_search:
         search_value.set("")
@@ -473,7 +477,7 @@ def update_detail_window(target, from_search):
 
     for i in range(len(o.state_data)):
         o.state_data[i].highlighted = False
-
+    
     detail_target = target
     for i in range(len(info_labels)):
         info_labels[i].configure(text=f"#{str(detail_target + i).zfill(4 if o.field_size < 10000 else 5)}: {o.parse_instruction_to_text(o.state_data[detail_target + i].instruction)}")
@@ -481,11 +485,28 @@ def update_detail_window(target, from_search):
         info_labels[i].configure(font=("Consolas", 15))
         o.state_data[detail_target + i].highlighted = True
 
+    detail_window_updating = False
+    # Buttons need to be locked to prevent the insane race condition that I cannot trace
+    th.Thread(target=lock_detail_buttons).start()
     o.render_queue = [True]
+
+def lock_detail_buttons():
+    global up_one_button, up_ten_button, down_one_button, down_ten_button
+
+    up_one_button.configure(state=ctk.DISABLED)
+    up_ten_button.configure(state=ctk.DISABLED)
+    down_one_button.configure(state=ctk.DISABLED)
+    down_ten_button.configure(state=ctk.DISABLED)
+    sleep(0.05)
+    up_one_button.configure(state=ctk.NORMAL)
+    up_ten_button.configure(state=ctk.NORMAL)
+    down_one_button.configure(state=ctk.NORMAL)
+    down_ten_button.configure(state=ctk.NORMAL)
 
 def close_detail_win():
     for i in range(len(o.state_data)):
         o.state_data[i].highlighted = False
+    o.prev_state_data = []
     o.render_queue = [True]
     try: detail_button.configure(state=ctk.NORMAL, text="Open Detail Viewer")
     except: pass

@@ -159,7 +159,6 @@ def compile_load_file(data, debug):
         load_line.address_2 = att_2
 
         if load_line.modifier is None:
-            # Rules for default modifiers are arbitrary and defined in ICWS 94
             load_line.modifier = get_default_modifier(load_line)
             debug_print(f"Processing has determined opcode's modifier, result: {load_line.opcode}.{load_line.modifier}")
 
