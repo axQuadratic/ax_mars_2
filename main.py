@@ -35,6 +35,7 @@ sim_thread = None
 # These are only used by the Redcode editor, but must be global as they need to be tracked between functions
 current_warrior = None
 current_edit_id = None
+current_selection = ctk.IntVar(value=0)
 
 detail_window_updating = False
 
@@ -108,7 +109,7 @@ def toggle_pause():
         o.render_queue.append(True) # Ensure rendering is caught up with state
 
 def open_setup_menu():
-    global setup_window, warrior_list_container, error_label
+    global setup_window, warrior_list_container, edit_warrior_button, remove_warrior_button, error_label
 
     if not o.paused: toggle_pause()
 
@@ -128,8 +129,8 @@ def open_setup_menu():
     warrior_list_container = ctk.CTkScrollableFrame(warrior_container, width=150, height=200, bg_color="gray39")
     add_warrior_button = ctk.CTkButton(warrior_container, text="Create Warrior", command=lambda: open_redcode_window(None))
     import_warrior_button = ctk.CTkButton(warrior_container, text="Import Load File [WIP]", state=ctk.DISABLED)
-    edit_warrior_button = ctk.CTkButton(warrior_container, text="Edit Selected", state=ctk.DISABLED)
-    remove_warrior_button = ctk.CTkButton(warrior_container, text="Remove Selected", state=ctk.DISABLED)
+    edit_warrior_button = ctk.CTkButton(warrior_container, text="Edit Selected", command=lambda: open_redcode_window(o.warriors_temp[current_selection.get()]), state=ctk.DISABLED if o.warriors == [] else ctk.NORMAL)
+    remove_warrior_button = ctk.CTkButton(warrior_container, text="Remove Selected", command=lambda: delete_warrior(current_selection.get()), state=ctk.DISABLED)
 
     core_size_container = ctk.CTkFrame(setup_window)
     core_size_label = ctk.CTkLabel(core_size_container, font=("TkDefaultFont", 14), text="Core Size")
@@ -187,7 +188,6 @@ def display_warriors():
     for child in warrior_list_container.winfo_children():
         child.destroy()
 
-    warrior_var = ctk.IntVar(value=0)
     i = 0
     for warrior in o.warriors_temp:
         display_color = o.get_tile_hex_color(warrior.color)
@@ -195,7 +195,7 @@ def display_warriors():
             display_name = warrior.name[0:13] + "..."
         else:
             display_name = warrior.name
-        new_warrior = ctk.CTkRadioButton(warrior_list_container, width=140, height=30, fg_color=display_color, hover_color=display_color, font=("Consolas", 13), text=display_name, variable=warrior_var, value=i)
+        new_warrior = ctk.CTkRadioButton(warrior_list_container, width=140, height=30, fg_color=display_color, hover_color=display_color, font=("Consolas", 13), text=display_name, variable=current_selection, value=i)
         new_warrior.grid(row=i, column=0, sticky="nsew")
         i += 1
 
@@ -232,12 +232,13 @@ def apply_setup(core_size, max_cycles, max_length, random_core):
 
     o.warriors = deepcopy(o.warriors_temp)
     o.initialize_core()
-    state_window_button.configure(text="View Core", state=ctk.NORMAL)
+    if state_window is not None:
+        close_state_win()
+    else:
+        state_window_button.configure(text="View Core", state=ctk.NORMAL)
     pause_button.configure(text="Start", state=ctk.NORMAL)
     one_step_button.configure(state=ctk.NORMAL)
     setup_window.destroy()
-
-    o.render_queue = [True] # The core viewer, if it is open, needs to be updated
 
 def open_redcode_window(warrior):
     global current_warrior, current_edit_id, redcode_window, compiled_display, save_button, clip_button
@@ -253,7 +254,7 @@ def open_redcode_window(warrior):
 
     compiled_container = ctk.CTkScrollableFrame(redcode_window)
     compiled_header = ctk.CTkLabel(compiled_container, anchor="w", text="Parsed Redcode:")
-    compiled_display = ctk.CTkLabel(compiled_container, font=("Consolas", 14), anchor="w", justify="left", text="No readable lines")
+    compiled_display = ctk.CTkLabel(compiled_container, font=("Consolas", 14), anchor="w", justify="left", text="No current output")
 
     button_container = ctk.CTkFrame(redcode_window)
     debug_button = ctk.CTkCheckBox(button_container, text="Enable debug output (slow)")
@@ -288,11 +289,13 @@ def open_redcode_window(warrior):
     button_container.grid_columnconfigure([0, 1], weight=1)
 
     if warrior is not None:
-        # Editing an extant warrior; needs to insert its data
-        current_warrior = warrior
-        current_edit_id = warrior.id
-        redcode_input.insert(0, warrior.raw_data)
-        compile_warrior(warrior.raw_data, False)
+        try:
+            # Editing an extant warrior; needs to insert its data
+            current_warrior = warrior
+            current_edit_id = warrior.id
+            redcode_input.insert("1.0", "\n".join(warrior.raw_data))
+        except:
+            redcode_window.destroy()
     else:
         current_warrior = None
         current_edit_id = None
@@ -324,7 +327,7 @@ def compile_warrior(data, debug):
     clip_button.configure(state=ctk.NORMAL)
 
     # The current_warrior variable is used in the below function
-    current_warrior.id = len(o.warriors_temp)
+    current_warrior.id = len(o.warriors_temp) if current_edit_id is None else current_edit_id
     current_warrior.color = o.get_tile_color_from_id(current_warrior.id)
     current_warrior.raw_data = data
 
@@ -339,7 +342,16 @@ def add_current_warrior_to_list():
                 o.warriors_temp[i] = current_warrior
 
     display_warriors()
+    edit_warrior_button.configure(state=ctk.NORMAL)
+    remove_warrior_button.configure(state=ctk.NORMAL)
     redcode_window.destroy()
+
+def delete_warrior(id):
+    o.warriors_temp.pop(id)
+    display_warriors()
+    if o.warriors_temp == []:
+        edit_warrior_button.configure(state=ctk.DISABLED)
+        remove_warrior_button.configure(state=ctk.DISABLED)
 
 def open_state_window():
     global state_window, state_canvas, detail_button
@@ -481,10 +493,10 @@ def update_detail_window(target, from_search):
         except: return
 
     if target < 0:
-        update_detail_window(0, from_search)
+        update_detail_window(o.field_size + target, from_search)
         return
-    if target > o.field_size - 10:
-        update_detail_window(o.field_size - 10, from_search)
+    if target > o.field_size:
+        update_detail_window(target % o.field_size, from_search)
         return
 
     for i in range(len(o.state_data)):
@@ -492,10 +504,11 @@ def update_detail_window(target, from_search):
     
     detail_target = target
     for i in range(len(info_labels)):
-        info_labels[i].configure(text=f"#{str(detail_target + i).zfill(4 if o.field_size < 10000 else 5)}: {o.parse_instruction_to_text(o.state_data[detail_target + i].instruction)}")
-        info_labels[i].configure(text_color=o.get_tile_hex_color(o.state_data[detail_target + i].color) if o.state_data[detail_target + i].color != "black" else "white")
+        target = (detail_target + i) % o.field_size
+        info_labels[i].configure(text=f"#{str(target).zfill(4 if o.field_size < 10000 else 5)}: {o.parse_instruction_to_text(o.state_data[target].instruction)}")
+        info_labels[i].configure(text_color=o.get_tile_hex_color(o.state_data[target].color) if o.state_data[target].color != "black" else "white")
         info_labels[i].configure(font=("Consolas", 15))
-        o.state_data[detail_target + i].highlighted = True
+        o.state_data[target].highlighted = True
 
     detail_window_updating = False
     # Buttons need to be locked to prevent the insane race condition that I cannot trace
@@ -556,6 +569,7 @@ def open_options_menu():
 
     # Set options as needed
     if ctk.get_appearance_mode() == "Dark": dark_mode_toggle.select()
+    if o.deghost_button_enabled: deghost_toggle.select()
 
 main()
 o.root.mainloop()
