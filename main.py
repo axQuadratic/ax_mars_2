@@ -2,6 +2,7 @@
 
 import customtkinter as ctk
 from tkinter.messagebox import showinfo
+from tkinter.filedialog import asksaveasfilename, askopenfilename
 import math
 import threading as th
 from PIL import ImageTk
@@ -57,7 +58,7 @@ def main():
     options_button = ctk.CTkButton(top_container, text="Options", command=open_options_menu)
 
     bottom_container = ctk.CTkFrame(o.root)
-    speed_control = ctk.CTkSlider(bottom_container, from_=0, to=7, number_of_steps=7, orientation=ctk.HORIZONTAL, command=change_speed)
+    speed_control = ctk.CTkSlider(bottom_container, from_=0, to=8, number_of_steps=8, orientation=ctk.HORIZONTAL, command=change_speed)
     speed_display = ctk.CTkLabel(bottom_container, text="1x", width=35)
     max_speed_button = ctk.CTkCheckBox(bottom_container, text="Max. Simulation Speed")
     async_button = ctk.CTkCheckBox(bottom_container, text="Asynchronous Rendering")
@@ -128,7 +129,7 @@ def open_setup_menu():
     warrior_label = ctk.CTkLabel(warrior_container, font=("TkDefaultFont", 14), text="Warriors")
     warrior_list_container = ctk.CTkScrollableFrame(warrior_container, width=150, height=200, bg_color="gray39")
     add_warrior_button = ctk.CTkButton(warrior_container, text="Create Warrior", command=lambda: open_redcode_window(None))
-    import_warrior_button = ctk.CTkButton(warrior_container, text="Import Load File [WIP]", state=ctk.DISABLED)
+    import_warrior_button = ctk.CTkButton(warrior_container, text="Import Load File", command=import_load_file)
     edit_warrior_button = ctk.CTkButton(warrior_container, text="Edit Selected", command=lambda: open_redcode_window(o.warriors_temp[current_selection.get()]), state=ctk.DISABLED if o.warriors == [] else ctk.NORMAL)
     remove_warrior_button = ctk.CTkButton(warrior_container, text="Remove Selected", command=lambda: delete_warrior(current_selection.get()), state=ctk.DISABLED)
 
@@ -240,8 +241,37 @@ def apply_setup(core_size, max_cycles, max_length, random_core):
     one_step_button.configure(state=ctk.NORMAL)
     setup_window.destroy()
 
+def import_load_file():
+    # Loads warrior data stored in a .red file, selected by the user
+    load_path = askopenfilename(title="Import Warrior", filetypes=[("Redcode '94 Load File", ".red"), ("All files", "*")])
+    
+    try:
+        with open(load_path) as save_file:
+            load_data = []
+            for line in save_file.readlines():
+                load_data.append(line)
+    except:
+        if load_path == "":
+            # Dismissing the popup returns an empty string; this prevents that error
+            return
+        else:
+            # Some other unknown loading error
+            error_text = ""
+            error_text += "The selected file could not be imported.\n"
+            error_text += "It may contain compiler errors, be corrupt,\n"
+            error_text += "or simply not contain a Redcode '94 load file."
+
+            showinfo("Import Error", error_text)
+            return
+
+    # readlines() reads all data including newline characters; this should sufficiently get rid of them
+    load_data = "".join(load_data)
+    load_data = load_data.split("\n")
+    
+    open_redcode_window(o.Warrior(None, None, None, load_data, None))
+
 def open_redcode_window(warrior):
-    global current_warrior, current_edit_id, redcode_window, compiled_display, save_button, clip_button
+    global current_warrior, current_edit_id, redcode_window, compiled_display, save_button, export_button, clip_button
 
     redcode_window = ctk.CTkToplevel(o.root)
     redcode_window.geometry("800x600")
@@ -260,8 +290,8 @@ def open_redcode_window(warrior):
     debug_button = ctk.CTkCheckBox(button_container, text="Enable debug output (slow)")
     compile_button = ctk.CTkButton(button_container, command=lambda: compile_warrior(redcode_input.get("1.0", "end-1c").split("\n"), bool(debug_button.get())), text="Compile")
     save_button = ctk.CTkButton(button_container, text="Add to Core", state=ctk.DISABLED, command=add_current_warrior_to_list)
-    export_button = ctk.CTkButton(button_container, text="Save as file [WIP]", state=ctk.DISABLED)
-    clip_button = ctk.CTkButton(button_container, text="Copy to clipboard", command=lambda: copy(compiled_display.cget("text")), state=ctk.DISABLED)
+    export_button = ctk.CTkButton(button_container, text="Save as File", command=save_warrior_as_load_file, state=ctk.DISABLED)
+    clip_button = ctk.CTkButton(button_container, text="Copy to Clipboard", command=lambda: copy(compiled_display.cget("text")), state=ctk.DISABLED)
 
     redcode_input.grid(row=0, column=0, rowspan=3, sticky="nsew")
 
@@ -294,8 +324,17 @@ def open_redcode_window(warrior):
             current_warrior = warrior
             current_edit_id = warrior.id
             redcode_input.insert("1.0", "\n".join(warrior.raw_data))
+
+            # Precompile the aforementioned warrior
+            compile_warrior(redcode_input.get("1.0", "end-1c").split("\n"), False)
         except:
+            error_text = ""
+            error_text += "The selected file could not be imported.\n"
+            error_text += "It may contain compiler errors, be corrupt,\n"
+            error_text += "or simply not contain a Redcode '94 load file."
+
             redcode_window.destroy()
+            showinfo("Import Error", error_text)
     else:
         current_warrior = None
         current_edit_id = None
@@ -311,6 +350,7 @@ def compile_warrior(data, debug):
 
         save_button.configure(state=ctk.DISABLED)
         clip_button.configure(state=ctk.DISABLED)
+        export_button.configure(state=ctk.DISABLED)
         return
 
     load_text = []
@@ -325,6 +365,7 @@ def compile_warrior(data, debug):
 
     save_button.configure(state=ctk.NORMAL)
     clip_button.configure(state=ctk.NORMAL)
+    export_button.configure(state=ctk.NORMAL)
 
     # The current_warrior variable is used in the below function
     current_warrior.id = len(o.warriors_temp) if current_edit_id is None else current_edit_id
@@ -345,6 +386,23 @@ def add_current_warrior_to_list():
     edit_warrior_button.configure(state=ctk.NORMAL)
     remove_warrior_button.configure(state=ctk.NORMAL)
     redcode_window.destroy()
+
+def save_warrior_as_load_file():
+    # Writes the current warriors load file data to a .red file of user selection
+    save_path = asksaveasfilename(title="Save Warrior", initialfile=f"{current_warrior.name if current_warrior.name != '' else 'Nameless'}.red", defaultextension="red", filetypes=[("Redcode '94 Load File", ".red"), ("All files", "*")], confirmoverwrite=True)
+
+    try:
+        with open(save_path, "w") as save_file:
+            write_data = []
+            # Save the warrior's code and other important data
+            if current_warrior.name != '':
+                write_data.append(f";name {current_warrior.name}")
+            for line in current_warrior.load_file:
+                write_data.append(o.parse_instruction_to_text(line))
+
+            save_file.write("\n".join(write_data))
+
+    except: return
 
 def delete_warrior(id):
     o.warriors_temp.pop(id)
@@ -554,7 +612,11 @@ def open_options_menu():
     options_window.after(201, lambda: options_window.iconbitmap("assets/tailwind_icon.ico"))
     options_window.grab_set()
 
-    credits_text = "Developed by Nils K (Quadratic) for Indirect UF\nInspired by pMARS, CoreWin and the defunct corewar.io\nLibraries used: customtkinter, PIL, pyperclip & dependencies\nProbably dedicated to someone, IDK"
+    credits_text = ""
+    credits_text += "Developed by Nils K (Quadratic) for Indirect UF\n"
+    credits_text += "Inspired by pMARS, CoreWin and the defunct corewar.io\n"
+    credits_text += "Libraries used: customtkinter, PIL, pyperclip & dependencies\n"
+    credits_text += "Probably dedicated to someone, IDK"
 
     dark_mode_toggle = ctk.CTkCheckBox(options_window, command=o.toggle_dark_mode, text="Dark Mode")
     deghost_toggle = ctk.CTkCheckBox(options_window, command=o.toggle_deghost, text="Show 'redraw core' button\n(use in case of ghost highlights)")

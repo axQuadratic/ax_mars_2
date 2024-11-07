@@ -69,6 +69,7 @@ class Warrior:
 class Process:
     def __init__(self, location : int, warrior : int):
         self.location = location
+        self.prev_location = None
         self.warrior = warrior
 
 class Tile:
@@ -106,14 +107,16 @@ state_image = None
 resized_state_image = None
 render_queue = []
 
-speed_levels = [1, 2, 5, 10, 25, 50, 100, 200]
+speed_levels = [1, 2, 5, 10, 25, 50, 100, 250, 500]
+max_speed_enabled = False
 deghost_button_enabled = False
 
 def initialize_core():
-    global state_data, prev_state_data, cur_cycle
+    global state_data, process_queue, prev_state_data, cur_cycle
 
     # Initialize a new core with all warriors and parameters
     state_data = [Tile(None, "black", Instruction(None, "DAT", "F", "#", 0, "#", 0), False) for i in range(field_size)]
+    process_queue = []
     prev_state_data = []
     cur_cycle = 0
 
