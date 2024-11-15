@@ -22,49 +22,62 @@ def pregenerate_tile(tile_size, border_width, fill_color, cross):
         for i in range(tile_size):
             data.append((0, 0, 0))
 
-    for k in range(tile_size - border_width * 2):
-        for i in range(border_width):
-            data.append((0, 0, 0))
+    if cross:
+        # This cross-drawing algorithm was developed by hand and is unbelievably janky
+        for k in range(math.floor((tile_size - border_width * 2) / 2)):
+            for i in range(border_width):
+                data.append((0, 0, 0))
 
-        if cross:
-            for j in range(int((tile_size - border_width * 2) / 2)):
-                for i in range(j):
-                    data.append(o.tile_colors.black)
+            for i in range(k if k < 8 else 7):
+                data.append(o.tile_colors.black.value)
 
-                for i in range(border_width * 2):
-                    data.append(o.tile_colors(fill_color).value)
+            for i in range(border_width * 2):
+                data.append(o.tile_colors(fill_color).value)
 
-                for i in range(tile_size - (border_width * 2 + j) * 2):
-                    data.append(o.tile_colors.black)
+            for i in range(tile_size - border_width * 2 - border_width * 4 - k * 2):
+                data.append(o.tile_colors.black.value)
 
-                for i in range(border_width * 2):
-                    data.append(o.tile_colors(fill_color).value)
-                
-                for i in range(j):
-                    data.append(o.tile_colors.black)
+            for i in range(border_width * 2):
+                data.append(o.tile_colors(fill_color).value)
+            
+            for i in range(k if k < 8 else 7):
+                data.append(o.tile_colors.black.value)
 
-            for j in range(int((tile_size - border_width * 2) / 2), 0, -1):
-                for i in range(j):
-                    data.append(o.tile_colors.black)
+            for i in range(border_width):
+                data.append((0, 0, 0))
+        
+        for k in reversed(range(math.floor((tile_size - border_width * 2) / 2))):
+            for i in range(border_width):
+                data.append((0, 0, 0))
 
-                for i in range(border_width * 2):
-                    data.append(o.tile_colors(fill_color).value)
+            for i in range(k if k < 8 else 7):
+                data.append(o.tile_colors.black.value)
 
-                for i in range(tile_size - (border_width * 2 + j) * 2):
-                    data.append(o.tile_colors.black)
+            for i in range(border_width * 2):
+                data.append(o.tile_colors(fill_color).value)
 
-                for i in range(border_width * 2):
-                    data.append(o.tile_colors(fill_color).value)
-                
-                for i in range(j):
-                    data.append((0, 0, 0))
+            for i in range(tile_size - border_width * 2 - border_width * 4 - k * 2):
+                data.append(o.tile_colors.black.value)
 
-        else:
+            for i in range(border_width * 2):
+                data.append(o.tile_colors(fill_color).value)
+            
+            for i in range(k if k < 8 else 7):
+                data.append(o.tile_colors.black.value)
+
+            for i in range(border_width):
+                data.append((0, 0, 0))
+
+    else:
+        for k in range(tile_size - border_width * 2):
+            for i in range(border_width):
+                data.append((0, 0, 0))
+
             for i in range(tile_size - border_width * 2):
                 data.append(o.tile_colors(fill_color).value)
 
-        for i in range(border_width):
-            data.append((0, 0, 0))
+            for i in range(border_width):
+                data.append((0, 0, 0))
 
     for j in range(border_width):
         for i in range(tile_size):
@@ -92,12 +105,20 @@ def create_image_from_state_data(state : list, prev_state : list, field_size : i
     current_tile = 0
     for y in range(row_count):
         for x in range(a_max_field_width):
+            # Determine the tile's colour
+            if state[current_tile].highlighted:
+                render_color = "highlight"
+            elif state[current_tile].read_marked:
+                render_color = "white"
+            else:
+                render_color = state[current_tile].color
+
             if prev_state == []:
-                # If no core was previously loaded, it must obviously be created from scratch
-                img_data = draw_tile(img_data, x * tile_size, y * tile_size, state[current_tile].color if not state[current_tile].highlighted else "highlight")
+                # If no core was previously loaded, each tile must obviously be created from scratch
+                img_data = draw_tile(img_data, x * tile_size, y * tile_size, render_color)
             elif state[current_tile] != prev_state[current_tile]:
                 # This step takes up quite a bit of CPU time, hence why it is skipped if the image would be unchanged
-                img_data = draw_tile(img_data, x * tile_size, y * tile_size, state[current_tile].color if not state[current_tile].highlighted else "highlight")
+                img_data = draw_tile(img_data, x * tile_size, y * tile_size, render_color)
 
             current_tile += 1
             if current_tile >= field_size: break

@@ -30,7 +30,6 @@ o.root.iconbitmap("assets/tailwind_icon.ico")
 state_window = None
 detail_window = None
 
-render_thread = None
 sim_thread = None
 
 # These are only used by the Redcode editor, but must be global as they need to be tracked between functions
@@ -38,16 +37,13 @@ current_warrior = None
 current_edit_id = None
 current_selection = ctk.IntVar(value=0)
 
-detail_window_updating = False
-
 def main():
-    global render_thread, sim_thread, state_window_button, setup_button, options_button, speed_display, pause_button, one_step_button
+    global sim_thread, state_window_button, setup_button, options_button, speed_display, pause_button, one_step_button, core_label
 
     # Start the background threads; graphics and simulation
-    render_thread = th.Thread(target=graphics_listener)
     sim_thread = th.Thread(target=process.simulation_clock)
-    render_thread.start()
     sim_thread.start()
+    render_state()
 
     # Create UI elements for the main window
     top_container = ctk.CTkFrame(o.root)
@@ -60,10 +56,12 @@ def main():
     bottom_container = ctk.CTkFrame(o.root)
     speed_control = ctk.CTkSlider(bottom_container, from_=0, to=8, number_of_steps=8, orientation=ctk.HORIZONTAL, command=change_speed)
     speed_display = ctk.CTkLabel(bottom_container, text="1x", width=35)
-    max_speed_button = ctk.CTkCheckBox(bottom_container, text="Max. Simulation Speed")
-    async_button = ctk.CTkCheckBox(bottom_container, text="Asynchronous Rendering")
+    max_speed_button = ctk.CTkCheckBox(bottom_container, text="Max. Simulation Speed", command=lambda: change_speed("max"))
     pause_button = ctk.CTkButton(bottom_container, text="Start", command=toggle_pause, state=ctk.DISABLED)
-    one_step_button = ctk.CTkButton(bottom_container, text="Advance One Cycle", state=ctk.DISABLED)
+    one_step_button = ctk.CTkButton(bottom_container, text="Advance One Cycle", command=lambda: process.simulation_clock(True), state=ctk.DISABLED)
+
+    core_frame = ctk.CTkFrame(bottom_container, fg_color="black")
+    core_label = ctk.CTkLabel(core_frame, text="No Core Loaded...", font=("Consolas", 12), anchor="w", justify="left")
 
     top_container.grid(row=0, column=0, sticky="nsew")
     bottom_container.grid(row=2, column=0, sticky="nsew")
@@ -78,8 +76,10 @@ def main():
     speed_control.grid(row=1, column=0, sticky="ew")
     speed_display.grid(row=1, column=1, sticky="nsew")
     max_speed_button.grid(row=2, column=0, sticky="nsew")
-    async_button.grid(row=2, column=2, columnspan=2, sticky="nsew")
     one_step_button.grid(row=0, column=3, sticky="nsew")
+
+    core_frame.grid(row=2, column=2, columnspan=2, sticky="nsew")
+    core_label.grid(row=0, column=1, sticky="nsew")
 
     o.root.grid_rowconfigure([0, 2], weight=1)
     o.root.grid_rowconfigure(1, weight=3)
@@ -91,9 +91,32 @@ def main():
     bottom_container.grid_rowconfigure(2, weight=1)
     bottom_container.grid_columnconfigure(2, weight=1)
 
+    core_frame.grid_rowconfigure(0, weight=1)
+    core_frame.grid_columnconfigure(0, weight=1)
+    core_frame.grid_columnconfigure(1, weight=10)
+
     speed_control.set(0)
 
+def render_state():
+    # Runs five times per second; executes the render queue and checks for simulation completion
+        update_core_label()
+        if o.update_requested:
+            update_state_canvas()
+            
+        if o.sim_completed:
+            # End the simulation
+            if not o.paused: toggle_pause()
+            pause_button.configure(text="Simulation Complete", state=ctk.DISABLED)
+            one_step_button.configure(state=ctk.DISABLED)
+        
+        o.root.after(20, render_state)
+
 def change_speed(new_speed):
+    if new_speed == "max":
+        # Max speed button is checked
+        o.max_speed_enabled = not o.max_speed_enabled
+        return
+
     o.play_speed = o.speed_levels[math.floor(new_speed)]
         
     speed_display.configure(text=f"{o.play_speed}x")
@@ -107,7 +130,7 @@ def toggle_pause():
         pause_button.configure(text="Unpause")
         one_step_button.configure(state=ctk.NORMAL)
         o.paused = True
-        o.render_queue.append(True) # Ensure rendering is caught up with state
+        o.update_requested = True # Ensure rendering is caught up with state
 
 def open_setup_menu():
     global setup_window, warrior_list_container, edit_warrior_button, remove_warrior_button, error_label
@@ -227,12 +250,18 @@ def apply_setup(core_size, max_cycles, max_length, random_core):
         return
     
     # Save/reset data in preparation for match
+    o.sim_completed = False
+    o.cur_cycle = 0
+
     o.field_size = core_size
     o.max_cycle_count = max_cycles
     o.max_program_length = max_length
 
     o.warriors = deepcopy(o.warriors_temp)
     o.initialize_core()
+
+    if detail_window is not None:
+        close_detail_win()
     if state_window is not None:
         close_state_win()
     else:
@@ -441,15 +470,7 @@ def open_state_window():
     bottom_bar_container.grid_columnconfigure([1, 3], weight=1)
     bottom_bar_container.grid_columnconfigure(5, weight=20)
 
-    o.render_queue = [True]
-
-def graphics_listener():
-    # Always runs in the background; executes the render queue whenever it is non-empty
-    while True:
-        sleep(0.05) # Delay to prevent excessive CPU usage
-
-        if o.render_queue == [] or detail_window_updating: continue
-        update_state_canvas()
+    o.update_requested = True
 
 def update_state_canvas():
     global state_window
@@ -457,7 +478,7 @@ def update_state_canvas():
     # Ignore if function is called when the window is not open
     if state_window is None or not state_window.winfo_exists(): return
     # Ignore if function is called while the render queue is empty
-    if o.render_queue == []: return
+    if not o.update_requested: return
     # If core is unloaded while window is open, close it
     if o.state_data == []: state_window.destroy()
 
@@ -472,7 +493,7 @@ def update_state_canvas():
     # Recalculate window size based on the size of the image; 40px margin for the border and bottom bar
     state_window.geometry(f"{round(810 / scale_factor)}x{round(o.resized_state_image.height / scale_factor) + 40}")
 
-    o.render_queue.pop(0)
+    o.update_requested = False
     
     # Copy updates to the previous state data
     o.prev_state_data = deepcopy(o.state_data)
@@ -538,9 +559,7 @@ def open_detail_window():
     update_detail_window(detail_target, False)
 
 def update_detail_window(target, from_search):
-    global detail_window_updating, detail_target, info_labels, search_value
-
-    detail_window_updating = True
+    global detail_target, info_labels, search_value
 
     if not from_search:
         search_value.set("")
@@ -563,15 +582,14 @@ def update_detail_window(target, from_search):
     detail_target = target
     for i in range(len(info_labels)):
         target = (detail_target + i) % o.field_size
-        info_labels[i].configure(text=f"#{str(target).zfill(4 if o.field_size < 10000 else 5)}: {o.parse_instruction_to_text(o.state_data[target].instruction)}")
+        info_labels[i].configure(text=f" #{str(target).zfill(4 if o.field_size < 10000 else 5)}: {o.parse_instruction_to_text(o.state_data[target].instruction)}")
         info_labels[i].configure(text_color=o.get_tile_hex_color(o.state_data[target].color) if o.state_data[target].color != "black" else "white")
         info_labels[i].configure(font=("Consolas", 15))
         o.state_data[target].highlighted = True
 
-    detail_window_updating = False
     # Buttons need to be locked to prevent the insane race condition that I cannot trace
     th.Thread(target=lock_detail_buttons).start()
-    o.render_queue = [True]
+    o.update_requested = True
 
 def lock_detail_buttons():
     global up_one_button, up_ten_button, down_one_button, down_ten_button
@@ -592,17 +610,30 @@ def deghost():
     for i in range(len(o.state_data)):
         o.state_data[i].highlighted = False
     o.prev_state_data = []
-    o.render_queue = [True]
+    o.update_requested = True
     update_detail_window(detail_target, False)
 
 def close_detail_win():
     for i in range(len(o.state_data)):
         o.state_data[i].highlighted = False
     o.prev_state_data = []
-    o.render_queue = [True]
+    o.update_requested = True
     try: detail_button.configure(state=ctk.NORMAL, text="Open Detail Viewer")
     except: pass
     detail_window.destroy()
+
+def update_core_label():
+    # Create text to be displayed on the root core readout
+    core_text = ""
+    core_text += f"Cycle {o.cur_cycle:0{len(str(o.max_cycle_count))}}/{o.max_cycle_count}\n"
+    if not o.sim_completed:
+        core_text += f"Warriors Remaining: {len(o.warriors_temp)}"
+    elif len(o.warriors_temp) == 1:
+        core_text += f"Winner: {o.warriors_temp[0].name} ({o.warriors_temp[0].color})"
+    else:
+        core_text += "Draw"
+    
+    core_label.configure(text=core_text)
 
 def open_options_menu():
     options_window = ctk.CTkToplevel(o.root)

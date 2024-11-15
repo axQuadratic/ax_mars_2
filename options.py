@@ -69,22 +69,26 @@ class Warrior:
 class Process:
     def __init__(self, location : int, warrior : int):
         self.location = location
-        self.prev_location = None
         self.warrior = warrior
 
 class Tile:
-    def __init__(self, warrior : int, color : str, instruction : Instruction, highlighted : bool):
+    def __init__(self, warrior : int, color : str, instruction : Instruction, read_marked : bool, highlighted : bool):
         self.warrior = warrior
         self.color = color
         self.instruction = instruction
+        self.read_marked = read_marked
         self.highlighted = highlighted
 
     # See Instruction
     def __eq__(self, other):
-        return self.warrior == other.warrior and self.color == other.color and self.instruction == other.instruction and self.highlighted == other.highlighted
+        c1 = self.warrior == other.warrior and self.color == other.color and self.instruction == other.instruction
+        c2 = self.read_marked == other.read_marked and self.highlighted == other.highlighted
+        return c1 and c2
     
     def __ne__(self, other):
-        return self.warrior != other.warrior or self.color != other.color or self.instruction != other.instruction or self.highlighted != other.highlighted
+        c1 = self.warrior != other.warrior or self.color != other.color or self.instruction != other.instruction
+        c2 = self.read_marked != other.read_marked or self.highlighted != other.highlighted
+        return c1 or c2
 
 # This is declared here, so it can be accessed by other files
 root = ctk.CTk()
@@ -105,7 +109,8 @@ process_queue = []
 
 state_image = None
 resized_state_image = None
-render_queue = []
+update_requested = False
+sim_completed = False
 
 speed_levels = [1, 2, 5, 10, 25, 50, 100, 250, 500]
 max_speed_enabled = False
@@ -115,7 +120,7 @@ def initialize_core():
     global state_data, process_queue, prev_state_data, cur_cycle
 
     # Initialize a new core with all warriors and parameters
-    state_data = [Tile(None, "black", Instruction(None, "DAT", "F", "#", 0, "#", 0), False) for i in range(field_size)]
+    state_data = [Tile(None, "black", Instruction(None, "DAT", "F", "#", 0, "#", 0), False, False) for i in range(field_size)]
     process_queue = []
     prev_state_data = []
     cur_cycle = 0
@@ -137,7 +142,7 @@ def initialize_core():
         # Once placement is found, place warrior
         i = warrior_pos
         for line in warrior.load_file:
-            state_data[i % field_size] = Tile(warrior.id, warrior.color, line, False)
+            state_data[i % field_size] = Tile(warrior.id, "cross_" + warrior.color, line, False, False)
             i += 1
 
         # Add warrior to process queue
