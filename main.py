@@ -29,6 +29,7 @@ o.root.iconbitmap("assets/tailwind_icon.ico")
 # These need to be declared here as their existence is required by several functions
 state_window = None
 detail_window = None
+core_label = None
 
 sim_thread = None
 
@@ -624,6 +625,8 @@ def close_detail_win():
 
 def update_core_label():
     # Create text to be displayed on the root core readout
+    if core_label is None or o.state_data == []: return
+
     core_text = ""
     core_text += f"Cycle {o.cur_cycle:0{len(str(o.max_cycle_count))}}/{o.max_cycle_count}\n"
     if not o.sim_completed:

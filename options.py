@@ -145,8 +145,8 @@ def initialize_core():
             state_data[i % field_size] = Tile(warrior.id, "cross_" + warrior.color, line, False, False)
             i += 1
 
-        # Add warrior to process queue
-        process_queue.append(Process(warrior_pos, warrior.id))
+        # Add warrior's process queue to main queue
+        process_queue.append([Process(warrior_pos, warrior.id)])
 
 def parse_instruction_to_text(instruction : Instruction):
     return f"{instruction.opcode}.{instruction.modifier} {instruction.a_mode_1}{instruction.address_1}, {instruction.a_mode_2}{instruction.address_2}"
