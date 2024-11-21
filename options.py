@@ -142,7 +142,7 @@ def initialize_core():
         # Once placement is found, place warrior
         i = warrior_pos
         for line in warrior.load_file:
-            state_data[i % field_size] = Tile(warrior.id, "cross_" + warrior.color, line, False, False)
+            state_data[i % field_size] = Tile(None, "cross_" + warrior.color, line, False, False)
             i += 1
 
         # Add warrior's process queue to main queue

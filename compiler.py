@@ -154,9 +154,9 @@ def compile_load_file(data, debug):
         att_2 = att_2.replace(",", "")
 
         load_line.a_mode_1 = a_mode_1
-        load_line.address_1 = att_1
+        load_line.address_1 = int(att_1)
         load_line.a_mode_2 = a_mode_2
-        load_line.address_2 = att_2
+        load_line.address_2 = int(att_2)
 
         if load_line.modifier is None:
             load_line.modifier = get_default_modifier(load_line)
