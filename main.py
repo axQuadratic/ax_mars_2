@@ -55,7 +55,7 @@ def main():
     options_button = ctk.CTkButton(top_container, text="Options", command=open_options_menu)
 
     bottom_container = ctk.CTkFrame(o.root)
-    speed_control = ctk.CTkSlider(bottom_container, from_=0, to=8, number_of_steps=8, orientation=ctk.HORIZONTAL, command=change_speed)
+    speed_control = ctk.CTkSlider(bottom_container, from_=0, to=9, number_of_steps=9, orientation=ctk.HORIZONTAL, command=change_speed)
     speed_display = ctk.CTkLabel(bottom_container, text="1x", width=35)
     max_speed_button = ctk.CTkCheckBox(bottom_container, text="Max. Simulation Speed", command=lambda: change_speed("max"))
     pause_button = ctk.CTkButton(bottom_container, text="Start", command=toggle_pause, state=ctk.DISABLED)

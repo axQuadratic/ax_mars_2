@@ -20,6 +20,7 @@ class tile_colors(Enum):
 
 # RGB to hex algorithm straight from Stackoverflow
 def get_tile_hex_color(color : str):
+    color = color.removeprefix("cross_")
     rgb = tile_colors[color].value
     return "#{:02x}{:02x}{:02x}".format(rgb[0], rgb[1], rgb[2])
 
@@ -70,6 +71,7 @@ class Process:
     def __init__(self, location : int, warrior : int):
         self.location = location
         self.warrior = warrior
+        self.dying = False
 
 class Tile:
     def __init__(self, warrior : int, color : str, instruction : Instruction, read_marked : bool, highlighted : bool):
@@ -112,7 +114,7 @@ resized_state_image = None
 update_requested = False
 sim_completed = False
 
-speed_levels = [1, 2, 5, 10, 25, 50, 100, 250, 500]
+speed_levels = [1, 5, 10, 50, 100, 250, 500, 1000, 2000, 5000]
 max_speed_enabled = False
 deghost_button_enabled = False
 
@@ -147,6 +149,13 @@ def initialize_core():
 
         # Add warrior's process queue to main queue
         process_queue.append([Process(warrior_pos, warrior.id)])
+
+    # All negative numbers in the core are converted to equivalent positives, as ICWS 94 requires
+    for tile in state_data:
+        if tile.instruction.address_1 < 0:
+            tile.instruction.address_1 = field_size - (tile.instruction.address_1 * -1)
+        if tile.instruction.address_2 < 0:
+            tile.instruction.address_2 = field_size - (tile.instruction.address_2 * -1)
 
 def parse_instruction_to_text(instruction : Instruction):
     return f"{instruction.opcode}.{instruction.modifier} {instruction.a_mode_1}{instruction.address_1}, {instruction.a_mode_2}{instruction.address_2}"
