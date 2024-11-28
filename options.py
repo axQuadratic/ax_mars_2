@@ -95,6 +95,8 @@ class Tile:
 # This is declared here, so it can be accessed by other files
 root = ctk.CTk()
 
+user_config = {}
+
 play_speed = 1
 paused = True
 field_size = 8000
@@ -113,6 +115,7 @@ state_image = None
 resized_state_image = None
 update_requested = False
 sim_completed = False
+program_closing = False
 
 speed_levels = [1, 5, 10, 50, 100, 250, 500, 1000, 2000, 5000]
 max_speed_enabled = False
@@ -122,7 +125,7 @@ def initialize_core():
     global state_data, process_queue, prev_state_data, cur_cycle
 
     # Initialize a new core with all warriors and parameters
-    state_data = [Tile(None, "black", Instruction(None, "DAT", "F", "#", 0, "#", 0), False, False) for i in range(field_size)]
+    state_data = [Tile(None, "black", Instruction(None, "DAT", "F", "$", 0, "$", 0), False, False) for i in range(field_size)]
     process_queue = []
     prev_state_data = []
     cur_cycle = 0
@@ -160,15 +163,28 @@ def initialize_core():
 def parse_instruction_to_text(instruction : Instruction):
     return f"{instruction.opcode}.{instruction.modifier} {instruction.a_mode_1}{instruction.address_1}, {instruction.a_mode_2}{instruction.address_2}"
 
+def close_all_threads():
+    global program_closing
+
+    # For terminating all active processes on program exit
+    program_closing = True
+    root.destroy()
+
 # Options menu
 
 def toggle_dark_mode():
+    # Changing dark mode options does not actually require a program restart; however changing theme does, and I want consistency
     if ctk.get_appearance_mode() == "Light":
-        ctk.set_appearance_mode("dark")
+        user_config["dark_mode_enabled"] = True
     else:
-        ctk.set_appearance_mode("light")
+        user_config["dark_mode_enabled"] = False
 
 def toggle_deghost():
     global deghost_button_enabled
 
     deghost_button_enabled = not deghost_button_enabled
+    user_config["deghost_button_enabled"] = deghost_button_enabled
+
+def set_theme(theme : str):
+    user_config["selected_theme"] = theme
+    ctk.set_default_color_theme(f"assets/themes/{theme}.json")

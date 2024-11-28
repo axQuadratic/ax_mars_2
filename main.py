@@ -5,12 +5,14 @@ from tkinter.messagebox import showinfo
 from tkinter.filedialog import asksaveasfilename, askopenfilename
 import math
 import threading as th
+import json
 from PIL import ImageTk
 from ctypes import windll
 from random import randint
 from time import sleep
 from pyperclip import copy
 from copy import deepcopy
+from os import listdir
 import graphics
 import options as o
 import compiler
@@ -18,13 +20,10 @@ import process
 
 # Global variables are declared in options.py
 
-ctk.set_appearance_mode("system")
-ctk.set_default_color_theme("assets/highlight.json")
-
 o.root.geometry("450x200")
 o.root.resizable(False, False)
-o.root.title("Tailwind v0.4")
-o.root.iconbitmap("assets/tailwind_icon.ico")
+o.root.title("Tailwind v0.6")
+o.root.protocol("WM_DELETE_WINDOW", o.close_all_threads)
 
 # These need to be declared here as their existence is required by several functions
 state_window = None
@@ -40,6 +39,9 @@ current_selection = ctk.IntVar(value=0)
 
 def main():
     global sim_thread, state_window_button, setup_button, options_button, speed_display, pause_button, one_step_button, core_label
+
+    # Do initial setup based on user configuration
+    load_user_config()
 
     # Start the background threads; graphics and simulation
     sim_thread = th.Thread(target=process.simulation_clock)
@@ -62,7 +64,7 @@ def main():
     one_step_button = ctk.CTkButton(bottom_container, text="Advance One Cycle", command=lambda: process.simulation_clock(True), state=ctk.DISABLED)
 
     core_frame = ctk.CTkFrame(bottom_container, fg_color="black")
-    core_label = ctk.CTkLabel(core_frame, text="No Core Loaded...", font=("Consolas", 12), anchor="w", justify="left")
+    core_label = ctk.CTkLabel(core_frame, text="No Core Loaded...", text_color="white", font=("Consolas", 12), anchor="w", justify="left")
 
     top_container.grid(row=0, column=0, sticky="nsew")
     bottom_container.grid(row=2, column=0, sticky="nsew")
@@ -142,7 +144,7 @@ def open_setup_menu():
     setup_window.title("Match Options")
     setup_window.geometry("500x275")
     setup_window.resizable(False, False)
-    setup_window.after(201, lambda: setup_window.iconbitmap("assets/tailwind_icon.ico")) # Workaround for a silly CTk behaviour which sets the icon only after 200ms
+    setup_window.after(201, lambda: setup_window.iconbitmap(f"assets/icons/icon_{o.user_config['selected_theme']}.ico")) # Workaround for a silly CTk behaviour which sets the icon only after 200ms
     setup_window.grab_set()
 
     o.warriors_temp = deepcopy(o.warriors) # Reset all unsaved warriors
@@ -155,7 +157,7 @@ def open_setup_menu():
     add_warrior_button = ctk.CTkButton(warrior_container, text="Create Warrior", command=lambda: open_redcode_window(None))
     import_warrior_button = ctk.CTkButton(warrior_container, text="Import Load File", command=import_load_file)
     edit_warrior_button = ctk.CTkButton(warrior_container, text="Edit Selected", command=lambda: open_redcode_window(o.warriors_temp[current_selection.get()]), state=ctk.DISABLED if o.warriors == [] else ctk.NORMAL)
-    remove_warrior_button = ctk.CTkButton(warrior_container, text="Remove Selected", command=lambda: delete_warrior(current_selection.get()), state=ctk.DISABLED)
+    remove_warrior_button = ctk.CTkButton(warrior_container, text="Remove Selected", command=lambda: delete_warrior(current_selection.get()), state=ctk.DISABLED if o.warriors == [] else ctk.NORMAL)
 
     core_size_container = ctk.CTkFrame(setup_window)
     core_size_label = ctk.CTkLabel(core_size_container, font=("TkDefaultFont", 14), text="Core Size")
@@ -307,7 +309,7 @@ def open_redcode_window(warrior):
     redcode_window.geometry("800x600")
     redcode_window.resizable(False, False)
     redcode_window.title("Tailwind Redcode Editor")
-    redcode_window.after(201, lambda: redcode_window.iconbitmap("assets/tailwind_icon.ico"))
+    redcode_window.after(201, lambda: redcode_window.iconbitmap(f"assets/icons/icon_{o.user_config['selected_theme']}.ico"))
     redcode_window.grab_set()
 
     redcode_input = ctk.CTkTextbox(redcode_window, font=("Consolas", 12), height=580, wrap=ctk.NONE)
@@ -432,7 +434,9 @@ def save_warrior_as_load_file():
 
             save_file.write("\n".join(write_data))
 
-    except: return
+    except:
+        showinfo("Export Error", "The warrior could not be exported.\nIf the issue persists, please report this issue via Indirect UF contact channels.")
+        return
 
 def delete_warrior(id):
     o.warriors_temp.pop(id)
@@ -449,7 +453,7 @@ def open_state_window():
     state_window = ctk.CTkToplevel(o.root)
     state_window.resizable(False, False) # Consider making this resizable in the future; right now resizing it would break everything
     state_window.title("Core Readout")
-    state_window.after(201, lambda: state_window.iconbitmap("assets/tailwind_icon.ico"))
+    state_window.after(201, lambda: state_window.iconbitmap(f"assets/icons/icon_{o.user_config['selected_theme']}.ico"))
     state_window.protocol("WM_DELETE_WINDOW", close_state_win)
 
     state_canvas = ctk.CTkCanvas(state_window, bg="black")
@@ -504,7 +508,7 @@ def close_state_win():
     state_window.destroy()
 
 def open_detail_window():
-    global detail_window, detail_target, search_value, info_labels, up_one_button, up_ten_button, down_one_button, down_ten_button
+    global detail_window, detail_target, search_value, info_labels, up_one_button, up_ten_button, down_one_button, down_ten_button, refresh_button
 
     detail_target = 0
 
@@ -512,9 +516,9 @@ def open_detail_window():
 
     detail_window = ctk.CTkToplevel(o.root)
     detail_window.title("Core Details")
-    detail_window.geometry("300x320" if o.deghost_button_enabled else "300x300")
+    detail_window.geometry("300x320")
     detail_window.resizable(False, False)
-    detail_window.after(201, lambda: detail_window.iconbitmap("assets/tailwind_icon.ico"))
+    detail_window.after(201, lambda: detail_window.iconbitmap(f"assets/icons/icon_{o.user_config['selected_theme']}.ico"))
     detail_window.protocol("WM_DELETE_WINDOW", close_detail_win)
 
     search_value = ctk.StringVar()
@@ -522,6 +526,7 @@ def open_detail_window():
     search_value.trace_add("write", lambda _a, _b, _c: update_detail_window(search_value.get(), True))
     data_container = ctk.CTkFrame(detail_window, fg_color="black")
     options_container = ctk.CTkFrame(detail_window, width=30)
+    bottom_container = ctk.CTkFrame(detail_window)
 
     info_labels = []
     for i in range(10):
@@ -532,14 +537,17 @@ def open_detail_window():
     down_one_button = ctk.CTkButton(options_container, text="↓", width=30, command=lambda: update_detail_window(detail_target + 1, False))
     down_ten_button = ctk.CTkButton(options_container, text="+10", width=30, command=lambda: update_detail_window(detail_target + 10, False))
 
-    deghost_button = ctk.CTkButton(detail_window, text="Redraw Core", command=deghost)
+    refresh_button = ctk.CTkButton(bottom_container, text="Refresh", command=lambda: update_detail_window(detail_target, False))
+    deghost_button = ctk.CTkButton(bottom_container, text="Redraw Core", command=deghost)
 
     search_bar.grid(row=0, column=0, columnspan=2, sticky="nsew")
     data_container.grid(row=1, column=0, sticky="nsew")
     options_container.grid(row=1, column=1, sticky="ns")
 
+    bottom_container.grid(row=2, column=0, columnspan=2, sticky="nsew")
+    refresh_button.grid(row=0, column=0, columnspan=2 if not o.deghost_button_enabled else 1, sticky="nsew")
     if o.deghost_button_enabled:
-        deghost_button.grid(row=2, column=0, columnspan=2, sticky="nsew")
+        deghost_button.grid(row=0, column=1, sticky="nsew")
 
     for i in range(len(info_labels)):
         info_labels[i].grid(row=i, column=0, sticky="nsew")
@@ -556,6 +564,9 @@ def open_detail_window():
 
     options_container.grid_rowconfigure([0, 1, 2, 3], weight=1)
     options_container.grid_columnconfigure(0, weight=1)
+
+    bottom_container.grid_rowconfigure(0, weight=1)
+    bottom_container.grid_columnconfigure([0, 1], weight=1)
 
     update_detail_window(detail_target, False)
 
@@ -599,11 +610,13 @@ def lock_detail_buttons():
     up_ten_button.configure(state=ctk.DISABLED, width=35)
     down_one_button.configure(state=ctk.DISABLED, width=35)
     down_ten_button.configure(state=ctk.DISABLED, width=35)
+    refresh_button.configure(state=ctk.DISABLED)
     sleep(0.01)
     up_one_button.configure(state=ctk.NORMAL, width=30)
     up_ten_button.configure(state=ctk.NORMAL, width=30)
     down_one_button.configure(state=ctk.NORMAL, width=30)
     down_ten_button.configure(state=ctk.NORMAL, width=30)
+    refresh_button.configure(state=ctk.NORMAL)
 
 def deghost():
     # Janky fix for ghost highlights problem on slower systems
@@ -639,12 +652,15 @@ def update_core_label():
     core_label.configure(text=core_text)
 
 def open_options_menu():
+    global options_window
+
     options_window = ctk.CTkToplevel(o.root)
     options_window.geometry("250x200")
     options_window.resizable(False, False)
-    options_window.title("Program Options")
-    options_window.after(201, lambda: options_window.iconbitmap("assets/tailwind_icon.ico"))
+    options_window.title("Options")
+    options_window.after(201, lambda: options_window.iconbitmap(f"assets/icons/icon_{o.user_config['selected_theme']}.ico"))
     options_window.grab_set()
+    options_window.protocol("WM_DELETE_WINDOW", close_options_win)
 
     credits_text = ""
     credits_text += "Developed by Nils K (Quadratic) for Indirect UF\n"
@@ -652,20 +668,79 @@ def open_options_menu():
     credits_text += "Libraries used: customtkinter, PIL, pyperclip & dependencies\n"
     credits_text += "Probably dedicated to someone, IDK"
 
-    dark_mode_toggle = ctk.CTkCheckBox(options_window, command=o.toggle_dark_mode, text="Dark Mode")
     deghost_toggle = ctk.CTkCheckBox(options_window, command=o.toggle_deghost, text="Show 'redraw core' button\n(use in case of ghost highlights)")
+    theme_settings_container = ctk.CTkFrame(options_window)
     credits_button = ctk.CTkButton(options_window, command=lambda: showinfo(title="Tailwind Redcode Simulator: Credits", message=credits_text), text="Credits")
 
-    dark_mode_toggle.grid(row=0, column=0, sticky="ew")
-    deghost_toggle.grid(row=1, column=0, sticky="ew")
+    theme_label = ctk.CTkLabel(theme_settings_container, text="Theme\n(changes require restart)")
+    theme_selector = ctk.CTkOptionMenu(theme_settings_container, command=o.set_theme)
+    dark_mode_toggle = ctk.CTkCheckBox(theme_settings_container, command=o.toggle_dark_mode, text="Dark Mode")
+
+    deghost_toggle.grid(row=0, column=0, sticky="ew")
+    theme_settings_container.grid(row=1, column=0, sticky="nsew")
     credits_button.grid(row=3, column=0, sticky="ns")
+
+    theme_label.grid(row=0, column=0, sticky="ew")
+    theme_selector.grid(row=1, column=0, sticky="nsew")
+    dark_mode_toggle.grid(row=2, column=0, sticky="ew")
 
     options_window.grid_rowconfigure(list(range(4)), weight=1)
     options_window.grid_columnconfigure(0, weight=1)
 
+    theme_settings_container.grid_rowconfigure(list(range(3)), weight=1)
+    theme_settings_container.grid_columnconfigure(0, weight=1)
+
     # Set options as needed
     if ctk.get_appearance_mode() == "Dark": dark_mode_toggle.select()
     if o.deghost_button_enabled: deghost_toggle.select()
+
+    # Configure the theme selector
+    # Get all themes in assets/themes excluding the hardcoded default and the template
+    themes = []
+    for theme in listdir("assets/themes"):
+        if theme == "template.json" or theme == "tailwind_blue.json": continue
+        themes.append(theme.removesuffix(".json"))
+
+    # The default theme should always be first in the list
+    themes.insert(0, "tailwind_blue")
+
+    theme_selector.configure(values=themes)
+    try: theme_selector.set(o.user_config["selected_theme"])
+    except: theme_selector.set("assets/themes/tailwind_blue.json")
+
+def close_options_win():
+    global options_window
+
+    save_user_config()
+    options_window.destroy()
+
+def save_user_config():
+    with open("tailwind.config", "w") as config_file:
+        config_file.write(json.dumps(o.user_config))
+
+def load_user_config():
+    try:
+        with open("tailwind.config", "r") as config_file:
+            # Set all options as required by the config file
+            o.user_config = json.loads(config_file.read())
+            if o.user_config["dark_mode_enabled"]:
+                ctk.set_appearance_mode("dark")
+            else:
+                ctk.set_appearance_mode("light")
+            o.deghost_button_enabled = o.user_config["deghost_button_enabled"]
+            ctk.set_default_color_theme(f"assets/themes/{o.user_config['selected_theme']}.json")
+
+    except FileNotFoundError:
+        # Create a config file with default settings
+        ctk.set_appearance_mode("system")
+        ctk.set_default_color_theme("assets/themes/tailwind_blue.json")
+        o.user_config["dark_mode_enabled"] = ctk.get_appearance_mode() == "Dark"
+        o.user_config["deghost_button_enabled"] = False
+        o.user_config["selected_theme"] = "tailwind_blue"
+        save_user_config()
+    
+    # Set the root window's icon to the loaded theme
+    o.root.iconbitmap(f"assets/icons/icon_{o.user_config['selected_theme']}.ico")
 
 main()
 o.root.mainloop()

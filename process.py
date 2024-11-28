@@ -22,6 +22,8 @@ def simulation_clock(single_step : bool = False):
                 # Above 5x speed, multiple instructions are run at once to decrease rendering demand
                 cycle_count = math.ceil(o.play_speed / 2)
                 sleep(0.5)
+                
+            if o.program_closing: break
             if o.paused or o.sim_completed: continue
 
         if o.cur_cycle + cycle_count > o.max_cycle_count:
@@ -43,6 +45,10 @@ def simulation_clock(single_step : bool = False):
                     for tile in o.state_data:
                         if tile.warrior != i: continue
                         tile.color = "cross_" + tile.color
+
+                    # Only one warrior remains, and is the winner
+                    if len(o.warriors_temp) == 1:
+                        o.sim_completed = True
 
         o.update_requested = True
         o.cur_cycle += cycle_count
@@ -66,18 +72,22 @@ def execute_process(queue : list, state : list):
     # Add read highlight to new process location unless max speed is enabled
     if not o.max_speed_enabled: state[process.location].read_marked = True
 
-    state, process = evaluate_instruction(state, state[process.location].instruction, process)
+    state, new_processes = evaluate_instruction(state, state[process.location].instruction, process)
 
-    # Add the updated process back to the queue unless it has been killed
-    if not process.dying:
-        queue.append(process)
+    # Add the updated processes back to the queue unless they has been killed
+    for new_process in new_processes:
+        if new_process.dying: continue
+        queue.append(new_process)
 
     return state, queue
 
-def evaluate_instruction(state : list, instruction : o.Instruction, process : o.Process):
+def evaluate_instruction(state : list, instruction : o.Instruction, cur_process : o.Process):
     # The main execution function
-    location_1 = get_absolute_core_location(instruction.a_mode_1, instruction.address_1, process.location)
-    location_2 = get_absolute_core_location(instruction.a_mode_2, instruction.address_2, process.location)
+    location_1 = get_absolute_core_location(instruction.a_mode_1, instruction.address_1, cur_process.location)
+    location_2 = get_absolute_core_location(instruction.a_mode_2, instruction.address_2, cur_process.location)
+
+    # Stores the active process and any processes created during execution
+    new_processes = [cur_process]
 
     match instruction.opcode:
         case "MOV":
@@ -115,16 +125,17 @@ def evaluate_instruction(state : list, instruction : o.Instruction, process : o.
                     # Whole instruction
                     state[location_2].instruction = copy(state[location_1].instruction)
 
-            if state[location_2].color != state[process.location].color:
-                state[location_2].color = "cross_" + state[process.location].color.removeprefix("cross_")
+            if state[location_2].color != state[cur_process.location].color:
+                state[location_2].color = "cross_" + state[cur_process.location].color.removeprefix("cross_")
 
         case "DAT":
             # Kills the current process
-            process.dying = True
-            return state, process
+            cur_process.dying = True
+            return state, new_processes
 
         case "ADD":
             # Adds the number in the source to the address in the destination
+            # Note that for all math operations, the source is always the current instruction unless indirect addressing is used
             match instruction.modifier:
                 case "A":
                     state[location_2].instruction.address_1 += state[location_1].instruction.address_1
@@ -180,52 +191,52 @@ def evaluate_instruction(state : list, instruction : o.Instruction, process : o.
         case "DIV":
             # Divides the target by the source
             # Note that it is always integer division, and division by 0 kills the process
-            if state[location_1].instruction.address_1 == 0:
-                process.dying = True
-                return state, process
-
-            match instruction.modifier:
-                case "A":
-                    state[location_2].instruction.address_1 //= state[location_1].instruction.address_1
-                case "B":
-                    state[location_2].instruction.address_2 //= state[location_1].instruction.address_2
-                case "AB":
-                    state[location_2].instruction.address_2 //= state[location_1].instruction.address_1
-                case "BA":
-                    state[location_2].instruction.address_1 //= state[location_1].instruction.address_2
-                case "F" | "I":
-                    state[location_2].instruction.address_1 //= state[location_1].instruction.address_1
-                    state[location_2].instruction.address_2 //= state[location_1].instruction.address_2
-                case "X":
-                    state[location_2].instruction.address_1 //= state[location_1].instruction.address_2
-                    state[location_2].instruction.address_2 //= state[location_1].instruction.address_1
+            try:
+                match instruction.modifier:
+                    case "A":
+                        state[location_2].instruction.address_1 //= state[location_1].instruction.address_1
+                    case "B":
+                        state[location_2].instruction.address_2 //= state[location_1].instruction.address_2
+                    case "AB":
+                        state[location_2].instruction.address_2 //= state[location_1].instruction.address_1
+                    case "BA":
+                        state[location_2].instruction.address_1 //= state[location_1].instruction.address_2
+                    case "F" | "I":
+                        state[location_2].instruction.address_1 //= state[location_1].instruction.address_1
+                        state[location_2].instruction.address_2 //= state[location_1].instruction.address_2
+                    case "X":
+                        state[location_2].instruction.address_1 //= state[location_1].instruction.address_2
+                        state[location_2].instruction.address_2 //= state[location_1].instruction.address_1
+            except ZeroDivisionError:
+                cur_process.dying = True
+                return state, new_processes
 
         case "MOD":
             # Performs modulo operation using the target and the source
-            if state[location_1].instruction.address_1 == 0:
-                process.dying = True
-                return state, process
-
-            match instruction.modifier:
-                case "A":
-                    state[location_2].instruction.address_1 %= state[location_1].instruction.address_1
-                case "B":
-                    state[location_2].instruction.address_2 %= state[location_1].instruction.address_2
-                case "AB":
-                    state[location_2].instruction.address_2 %= state[location_1].instruction.address_1
-                case "BA":
-                    state[location_2].instruction.address_1 %= state[location_1].instruction.address_2
-                case "F" | "I":
-                    state[location_2].instruction.address_1 %= state[location_1].instruction.address_1
-                    state[location_2].instruction.address_2 %= state[location_1].instruction.address_2
-                case "X":
-                    state[location_2].instruction.address_1 %= state[location_1].instruction.address_2
-                    state[location_2].instruction.address_2 %= state[location_1].instruction.address_1
+            try:
+                match instruction.modifier:
+                    case "A":
+                        state[location_2].instruction.address_1 %= state[location_1].instruction.address_1
+                    case "B":
+                        state[location_2].instruction.address_2 %= state[location_1].instruction.address_2
+                    case "AB":
+                        state[location_2].instruction.address_2 %= state[location_1].instruction.address_1
+                    case "BA":
+                        state[location_2].instruction.address_1 %= state[location_1].instruction.address_2
+                    case "F" | "I":
+                        state[location_2].instruction.address_1 %= state[location_1].instruction.address_1
+                        state[location_2].instruction.address_2 %= state[location_1].instruction.address_2
+                    case "X":
+                        state[location_2].instruction.address_1 %= state[location_1].instruction.address_2
+                        state[location_2].instruction.address_2 %= state[location_1].instruction.address_1
+            except ZeroDivisionError:
+                cur_process.dying = True
+                return state, new_processes
 
         case "JMP":
             # Jumps to the A-field address
-            process.location = location_1
-            return state, process
+            cur_process.location = location_1
+            return state, new_processes
         
         case "JMZ":
             # Jumps to the A-field address only if the value of the target is 0
@@ -237,22 +248,151 @@ def evaluate_instruction(state : list, instruction : o.Instruction, process : o.
                 case "B" | "BA":
                     if state[location_2].instruction.address_2 == 0:
                         check_passed = True
-                case "F" | "I" | "X":
+                case "F" | "X" | "I":
                     if state[location_2].instruction.address_1 == 0 and state[location_2].instruction.address_2 == 0:
                         check_passed = True
             if check_passed:
-                process.location = location_1
-                return state, process
+                cur_process.location = location_1
+                return state, new_processes
+            
+        case "JMN":
+            # Jumps if target is not 0; the opposite of JMZ
+            check_passed = False
+            match instruction.modifier:
+                case "A" | "AB":
+                    if state[location_2].instruction.address_1 != 0:
+                        check_passed = True
+                case "B" | "BA":
+                    if state[location_2].instruction.address_2 != 0:
+                        check_passed = True
+                case "F" | "X" | "I":
+                    if state[location_2].instruction.address_1 != 0 or state[location_2].instruction.address_2 != 0:
+                        check_passed = True
+            if check_passed:
+                cur_process.location = location_1
+                return state, new_processes
+
+        case "DJN":
+            # Identical to JMN except the target number is first decemented by 1
+            check_passed = False
+            match instruction.modifier:
+                case "A" | "AB":
+                    state[location_2].instruction.address_1 -= 1
+                    if state[location_2].instruction.address_1 != 0:
+                        check_passed = True
+                case "B" | "BA":
+                    state[location_2].instruction.address_2 -= 1
+                    if state[location_2].instruction.address_2 != 0:
+                        check_passed = True
+                case "F" | "X" | "I":
+                    state[location_2].instruction.address_1 -= 1
+                    state[location_2].instruction.address_2 -= 1
+                    if state[location_2].instruction.address_1 != 0 or state[location_2].instruction.address_2 != 0:
+                        check_passed = True
+            if check_passed:
+                cur_process.location = location_1
+                return state, new_processes
+
+        case "SPL":
+            # Creates a new process at the target location
+            new_processes.append(o.Process(location_1, cur_process.warrior))
+
+        case "SEQ" | "CMP":
+            # Compares the instructions at the A- and B-fields; skips the next instruction if they are equal
+            check_passed = False
+            match instruction.modifier:
+                case "A":
+                    if state[location_1].instruction.address_1 == state[location_2].instruction.address_1:
+                        check_passed = True
+                case "B":
+                    if state[location_1].instruction.address_2 == state[location_2].instruction.address_2:
+                        check_passed = True
+                case "AB":
+                    if state[location_1].instruction.address_1 == state[location_2].instruction.address_2:
+                        check_passed = True
+                case "BA":
+                    if state[location_1].instruction.address_2 == state[location_2].instruction.address_1:
+                        check_passed = True
+                case "F":
+                    if state[location_1].instruction.address_1 == state[location_2].instruction.address_1 and state[location_1].instruction.address_2 == state[location_2].instruction.address_2:
+                        check_passed = True
+                case "X":
+                    if state[location_1].instruction.address_1 == state[location_2].instruction.address_2 and state[location_1].instruction.address_2 == state[location_2].instruction.address_1:
+                        check_passed = True
+                case "I":
+                    if state[location_1].instruction == state[location_2].instruction:
+                        check_passed = True
+            if check_passed:
+                cur_process.location += 2
+                cur_process.location %= o.field_size
+                return state, new_processes
+
+        case "SNE":
+            # Inverse of SEQ/CMP; skips if compared instructions are not equal
+            check_passed = False
+            match instruction.modifier:
+                case "A":
+                    if state[location_1].instruction.address_1 != state[location_2].instruction.address_1:
+                        check_passed = True
+                case "B":
+                    if state[location_1].instruction.address_2 != state[location_2].instruction.address_2:
+                        check_passed = True
+                case "AB":
+                    if state[location_1].instruction.address_1 != state[location_2].instruction.address_2:
+                        check_passed = True
+                case "BA":
+                    if state[location_1].instruction.address_2 != state[location_2].instruction.address_1:
+                        check_passed = True
+                case "F":
+                    if state[location_1].instruction.address_1 != state[location_2].instruction.address_1 or state[location_1].instruction.address_2 != state[location_2].instruction.address_2:
+                        check_passed = True
+                case "X":
+                    if state[location_1].instruction.address_1 != state[location_2].instruction.address_2 or state[location_1].instruction.address_2 != state[location_2].instruction.address_1:
+                        check_passed = True
+                case "I":
+                    if state[location_1].instruction != state[location_2].instruction:
+                        check_passed = True
+            if check_passed:
+                cur_process.location += 2
+                cur_process.location %= o.field_size
+                return state, new_processes
+            
+        case "SLT":
+            # Performs SEQ/CMP/SNE skip if the source value is less than the target
+            check_passed = False
+            match instruction.modifier:
+                case "A":
+                    if state[location_1].instruction.address_1 < state[location_2].instruction.address_1:
+                        check_passed = True
+                case "B":
+                    if state[location_1].instruction.address_2 < state[location_2].instruction.address_2:
+                        check_passed = True
+                case "AB":
+                    if state[location_1].instruction.address_1 < state[location_2].instruction.address_2:
+                        check_passed = True
+                case "BA":
+                    if state[location_1].instruction.address_2 < state[location_2].instruction.address_1:
+                        check_passed = True
+                case "F" | "I":
+                    if state[location_1].instruction.address_1 < state[location_2].instruction.address_1 or state[location_1].instruction.address_2 < state[location_2].instruction.address_2:
+                        check_passed = True
+                case "X":
+                    if state[location_1].instruction.address_1 < state[location_2].instruction.address_2 or state[location_1].instruction.address_2 < state[location_2].instruction.address_1:
+                        check_passed = True
+            if check_passed:
+                cur_process.location += 2
+                cur_process.location %= o.field_size
+                return state, new_processes
 
         case "NOP" | "_":
             # No operation
             pass
 
     # Move the process forward one step
-    process.location += 1
-    process.location %= o.field_size
+    cur_process.location += 1
+    cur_process.location %= o.field_size
         
-    return state, process
+    return state, new_processes
 
 def get_absolute_core_location(mode : str, value : int, origin : int):
     # Converts an addressing mode-value pair to an absolute value

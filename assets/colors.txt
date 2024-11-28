@@ -1,0 +1,10 @@
+blue: #00c8c8
+red: #c80000
+green: #00c800
+yellow: #c8c800
+orange: #ff9600
+purple: #6e00ff
+pink: #ff6ee6
+grey: #c8c8c8
+light text: #dce4ee
+dark text: #17181a
