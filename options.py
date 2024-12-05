@@ -187,4 +187,3 @@ def toggle_deghost():
 
 def set_theme(theme : str):
     user_config["selected_theme"] = theme
-    ctk.set_default_color_theme(f"assets/themes/{theme}.json")

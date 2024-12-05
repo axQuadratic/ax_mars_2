@@ -76,13 +76,13 @@ def compile_load_file(data, debug):
                 load_line.label = attributes[0]
                 labels.append(Label(load_line.label, current_line))
                 debug_print("Line has label: " + load_line.label)
-            attributes.pop(0) # To ensure consistency with labelless instructions
-            if len(attributes) == 0:
+            if len(attributes) == 1:
                 # Label has no instruction
                 debug_print("Compiler error detected. Aborting...")
                 error_list.append(f"Bad instruction at '{line.strip()}'\n(invalid opcode)")
                 new_warrior.load_file.append(load_line)
                 continue
+            attributes.pop(0) # To ensure consistency with labelless instructions
 
         opcode_data = attributes[0].upper().split(".")
         # Extract the modifier from the opcode
@@ -114,7 +114,7 @@ def compile_load_file(data, debug):
             # All other address-related blocks fall through if these are set here 
             a_mode_1 = "$"
             att_1 = "0,"
-            debug_print(f"No A-field specified, assuming {a_mode_1}0...")
+            debug_print("No A-field specified, assuming $0...")
         
         second_attribute_unset = False
         if len(attributes) >= 3:
@@ -124,7 +124,7 @@ def compile_load_file(data, debug):
             a_mode_2 = "$"
             att_2 = "0"
             second_attribute_unset = True
-            debug_print(f"No B-field specified, assuming {a_mode_2}0...")
+            debug_print("No B-field specified, assuming $0...")
 
         if a_mode_1 not in o.addressing_modes:
             # No addressing mode is present

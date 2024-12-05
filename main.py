@@ -302,8 +302,6 @@ class App():
         self.open_redcode_window(o.Warrior(None, None, None, load_data, None))
 
     def open_redcode_window(self, warrior):
-        global current_warrior, current_edit_id, redcode_window, compiled_display, save_button, export_button, clip_button
-
         self.redcode_window = ctk.CTkToplevel(o.root)
         self.redcode_window.geometry("800x600")
         self.redcode_window.resizable(False, False)
@@ -364,7 +362,7 @@ class App():
                 error_text += "It may contain compiler errors, be corrupt,\n"
                 error_text += "or simply not contain a Redcode '94 load file."
 
-                redcode_window.destroy()
+                self.redcode_window.destroy()
                 showinfo("Import Error", error_text)
         else:
             self.current_warrior = None
@@ -418,7 +416,7 @@ class App():
 
     def save_warrior_as_load_file(self):
         # Writes the current warriors load file data to a .red file of user selection
-        save_path = asksaveasfilename(title="Save Warrior", initialfile=f"{current_warrior.name if current_warrior.name != '' else 'Nameless'}.red", defaultextension="red", filetypes=[("Redcode '94 Load File", ".red"), ("All files", "*")], confirmoverwrite=True)
+        save_path = asksaveasfilename(title="Save Warrior", initialfile=f"{self.current_warrior.name if self.current_warrior.name != '' else 'Nameless'}.red", defaultextension="red", filetypes=[("Redcode '94 Load File", ".red"), ("All files", "*")], confirmoverwrite=True)
 
         try:
             with open(save_path, "w") as save_file:
@@ -725,5 +723,7 @@ class App():
         # Set the root window's icon to the loaded theme
         o.root.iconbitmap(f"assets/icons/icon_{o.user_config['selected_theme']}.ico")
 
+print("Log active, launching Tailwind v0.6...")
 main = App()
+print("Tailwind loaded successfully.")
 o.root.mainloop()
