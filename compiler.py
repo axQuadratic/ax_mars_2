@@ -9,6 +9,12 @@ class Label:
         self.name = name
         self.line = line
 
+    def __eq__(self, other : str):
+        return self.name == other
+    
+    def __ne__(self, other : str):
+        return self.name != other
+
 labels = []
 
 # Not currently implemented
@@ -29,10 +35,30 @@ def compile_load_file(data, debug):
 
     debug_print("Compiler active. Processing assembly file...")
 
+    # Unimplemented label-related code for future use
+    """
+    if initial_data[0] not in o.opcodes:
+        # Label is present
+        if attributes[0].isnumeric():
+            # Labels cannot be purely numeric
+            debug_print("Detected label is purely numeric. Ignoring...")
+        else:
+            load_line.label = attributes[0]
+            labels.append(Label(load_line.label, current_line))
+            debug_print("Line has label: " + load_line.label)
+        if len(attributes) == 1:
+            # Label has no instruction
+            debug_print("Compiler error detected. Aborting...")
+            error_list.append(f"Bad instruction at '{line.strip()}'\n(invalid opcode)")
+            new_warrior.load_file.append(load_line)
+            continue
+        attributes.pop(0) # To ensure consistency with labelless instructions
+    """
+
     # Read each line individually and parse it into an Instruction object
     current_line = 0
     for line in data:
-        load_line = o.Instruction(None, None, None, None, None, None, None)
+        load_line = o.Instruction(None, None, None, None, None, None)
 
         debug_print("Reading line: " + line)
 
@@ -58,32 +84,7 @@ def compile_load_file(data, debug):
             debug_print(f";name parameter identified; warrior's name is {new_warrior.name}")
             continue
 
-        if len(attributes) > 4:
-            # Too many attributes!
-            debug_print("Compiler error detected. Aborting...")
-            error_list.append(f"Bad instruction at '{line.strip()}'\n(too many attributes)")
-            new_warrior.load_file.append(load_line)
-            continue
-        
-        initial_data = attributes[0].upper().split(".")
         # Insert every attribute into the instruction object in order
-        if initial_data[0] not in o.opcodes:
-            # Label is present
-            if attributes[0].isnumeric():
-                # Labels cannot be purely numeric
-                debug_print("Detected label is purely numeric. Ignoring...")
-            else:
-                load_line.label = attributes[0]
-                labels.append(Label(load_line.label, current_line))
-                debug_print("Line has label: " + load_line.label)
-            if len(attributes) == 1:
-                # Label has no instruction
-                debug_print("Compiler error detected. Aborting...")
-                error_list.append(f"Bad instruction at '{line.strip()}'\n(invalid opcode)")
-                new_warrior.load_file.append(load_line)
-                continue
-            attributes.pop(0) # To ensure consistency with labelless instructions
-
         opcode_data = attributes[0].upper().split(".")
         # Extract the modifier from the opcode
         load_line.opcode = opcode_data[0]
@@ -104,63 +105,53 @@ def compile_load_file(data, debug):
         if load_line.modifier is not None:
             debug_print(f"Valid opcode and modifier confirmed: {load_line.opcode}.{load_line.modifier}")
         else:
-            debug_print(f"Valid opcode confirmed: {load_line.opcode}. No modifier declared, processing...")
+            debug_print(f"Valid opcode confirmed: {load_line.opcode}. No modifier declared, awaiting addressing modes to determine...")
 
-        # Extract addressing modes from adresses
-        if len(attributes) >= 2:
-            a_mode_1 = attributes[1][0:1]
-            att_1 = None
+        # Extract the A-field addressing mode
+        a_mode = attributes[1][0:1]
+        if not a_mode in o.addressing_modes:
+            # None is declared; use default
+            load_line.a_mode_1 = "$"
+            debug_print("No A-field addressing mode detected, assuming relative...")
         else:
-            # All other address-related blocks fall through if these are set here 
-            a_mode_1 = "$"
-            att_1 = "0,"
-            debug_print("No A-field specified, assuming $0...")
-        
-        second_attribute_unset = False
-        if len(attributes) >= 3:
-            a_mode_2 = attributes[2][0:1]
-            att_2 = None
+            load_line.a_mode_1 = a_mode
+            attributes[1] = attributes[1][1:len(attributes[1])]
+
+        # Evaluates any expressions or labels in the following addresses
+        attributes = evaluate_attribute_list(attributes, 1)
+
+        # Ditto for B-field unless none is specified
+        if len(attributes) > 2:
+            b_mode = attributes[2][0:1]
+            if not b_mode in o.addressing_modes:
+                load_line.a_mode_2 = "$"
+                debug_print("No B-field addressing mode detected, assuming relative...")
+            else:
+                load_line.a_mode_2 = a_mode
+                attributes[2] = attributes[2][1:len(attributes[2])]
+
+            attributes = evaluate_attribute_list(attributes, 2)
+
+            # Assign the processed values to their appropariate locations
+            load_line.address_1 = attributes[1]
+            load_line.address_2 = attributes[2]
+
         else:
-            a_mode_2 = "$"
-            att_2 = "0"
-            second_attribute_unset = True
-            debug_print("No B-field specified, assuming $0...")
-
-        if a_mode_1 not in o.addressing_modes:
-            # No addressing mode is present
-            debug_print(f"No addressing mode detected in A-field. Assuming relative...")
-            a_mode_1 = "$"
-            att_1 = attributes[1]
-        elif att_1 is None:
-            att_1 = attributes[1][1:len(attributes[1])]
-        if a_mode_2 not in o.addressing_modes:
-            debug_print(f"No addressing mode detected in B-field. Assuming relative...")
-            a_mode_2 = "$"
-            att_2 = attributes[2]
-        elif att_2 is None:
-            att_2 = attributes[2][1:len(attributes[2])]
-
-        debug_print(f"Field expressions determined as {a_mode_1}{att_1} {a_mode_2}{att_2}")
-
-        # Adresses must be comma separated according to ICWS 94
-        if list(att_1)[-1] != "," and not second_attribute_unset:
-            debug_print("Compiler error detected. Aborting...")
-            error_list.append(f"Bad instruction at '{line.strip()}'\n(invalid adress)")
-            new_warrior.load_file.append(load_line)
-            continue
-
-        # Remove trailing commas
-        att_1 = att_1.replace(",", "")
-        att_2 = att_2.replace(",", "")
-
-        load_line.a_mode_1 = a_mode_1
-        load_line.address_1 = int(att_1)
-        load_line.a_mode_2 = a_mode_2
-        load_line.address_2 = int(att_2)
+            # No B-field specified
+            if opcode_data[0] != "DAT":
+                load_line.address_1 = attributes[1]
+                load_line.a_mode_2 = "$"
+                load_line.address_2 = 0
+            else:
+                # For some inexplicable reason, ICWS 94 requests single-argument DATs have it placed in their B-field
+                load_line.a_mode_2 = load_line.a_mode_1
+                load_line.a_mode_1 = "$"
+                load_line.address_1 = 0
+                load_line.address_2 = attributes[1]
 
         if load_line.modifier is None:
             load_line.modifier = get_default_modifier(load_line)
-            debug_print(f"Processing has determined opcode's modifier, result: {load_line.opcode}.{load_line.modifier}")
+            debug_print(f"Addressing modes used to determine opcode's modifier, result: {load_line.opcode}.{load_line.modifier}")
 
         new_warrior.load_file.append(load_line)
         debug_print(f"Line completed. Load file output: " + o.parse_instruction_to_text(load_line))
@@ -201,6 +192,29 @@ def get_default_modifier(instruction : o.Instruction):
             return "F"
         case _:
             return "B"
+        
+def evaluate_attribute_list(attributes : list, target : int):
+    debug_print(f"Initialising expression evaluation subroutine at position {target}...")
+    # Check for the type of the target attribute; pure number, single label, or expression
+    if attributes[target][-1] == "," or len(attributes) - 1 <= target:
+        # Attribute is either suffixed by a comma or the last attribute, and hence either a single label or a number
+        attributes[target] = attributes[target].replace(",", "")
+
+        target_is_numeric = True
+        try: 
+            int(attributes[target])
+        except:
+            target_is_numeric = False
+
+        if target_is_numeric:
+            debug_print("EXEVAL: Target is an address value. No further processing required...")
+            attributes[target] = int(attributes[target])
+        else:
+            # Target is a single label; check it against all known labels
+            pass
+
+    debug_print("EXEVAL: Expression evaluation complete. Result: " + str(attributes[target]))
+    return attributes
 
 # For use as debug symbol
 def debug_print(text):

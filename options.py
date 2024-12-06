@@ -44,8 +44,7 @@ opcodes = [
 ]
 
 class Instruction:
-    def __init__(self, label : str, opcode : str, modifier : str, a_mode_1 : str, address_1, a_mode_2 : str, address_2):
-        self.label = label
+    def __init__(self, opcode : str, modifier : str, a_mode_1 : str, address_1, a_mode_2 : str, address_2):
         self.opcode = opcode
         self.modifier = modifier
         self.a_mode_1 = a_mode_1
@@ -125,7 +124,7 @@ def initialize_core():
     global state_data, process_queue, prev_state_data, cur_cycle
 
     # Initialize a new core with all warriors and parameters
-    state_data = [Tile(None, "black", Instruction(None, "DAT", "F", "$", 0, "$", 0), False, False) for i in range(field_size)]
+    state_data = [Tile(None, "black", Instruction("DAT", "F", "$", 0, "$", 0), False, False) for i in range(field_size)]
     process_queue = []
     prev_state_data = []
     cur_cycle = 0
