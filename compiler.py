@@ -1,21 +1,9 @@
 # This file handles the compilation of raw warrior text data into load files
-# It is also the file that handles final parsing and execution of load file data
 import re
 import options as o
 
-# For easy access to label data
-class Label:
-    def __init__(self, name, line):
-        self.name = name
-        self.line = line
-
-    def __eq__(self, other : str):
-        return self.name == other
-    
-    def __ne__(self, other : str):
-        return self.name != other
-
-labels = []
+# Labels are stored in the format "name": line
+labels = {}
 
 # Not currently implemented
 constants = {
@@ -23,6 +11,15 @@ constants = {
 }
 
 debug_enabled = False
+
+# Stores loop data, used by preprocessing
+class Loop:
+    def __init__(self, start_line, end_line, repeats):
+        self.start_line = start_line
+        self.end_line = end_line
+        self.repeats = repeats
+
+loops = []
 
 def compile_load_file(data, debug):
     global labels, debug_enabled
@@ -35,33 +32,11 @@ def compile_load_file(data, debug):
 
     debug_print("Compiler active. Processing assembly file...")
 
-    # Unimplemented label-related code for future use
-    """
-    if initial_data[0] not in o.opcodes:
-        # Label is present
-        if attributes[0].isnumeric():
-            # Labels cannot be purely numeric
-            debug_print("Detected label is purely numeric. Ignoring...")
-        else:
-            load_line.label = attributes[0]
-            labels.append(Label(load_line.label, current_line))
-            debug_print("Line has label: " + load_line.label)
-        if len(attributes) == 1:
-            # Label has no instruction
-            debug_print("Compiler error detected. Aborting...")
-            error_list.append(f"Bad instruction at '{line.strip()}'\n(invalid opcode)")
-            new_warrior.load_file.append(load_line)
-            continue
-        attributes.pop(0) # To ensure consistency with labelless instructions
-    """
-
-    # Read each line individually and parse it into an Instruction object
+    # Preprocess raw data; eliminate comments and save labels as required
+    debug_print("Preprocessing input data...")
+    preprocessed_data = []
     current_line = 0
     for line in data:
-        load_line = o.Instruction(None, None, None, None, None, None)
-
-        debug_print("Reading line: " + line)
-
         # Split the line at every instance of whitespace
         attributes = re.split("\t| ", line)
 
@@ -69,20 +44,95 @@ def compile_load_file(data, debug):
             attributes.remove("")
         if len(attributes) == 0:
             # Line is empty
-            debug_print("Line is empty, continuing...")
+            debug_print("- Empty line detected, ignoring...")
             continue
 
         if attributes[0][0] == ";":
             # Line is a comment
-            if attributes[0][1:len(attributes[0])] == "name":
+            if attributes[0][1:len(attributes[0])] == "name" or attributes[1] == "name":
                 new_warrior.name = " ".join(attributes[1:len(attributes)])
-            elif attributes[1] == "name":
-                new_warrior.name = " ".join(attributes[2:len(attributes)])
             else:
                 continue
 
-            debug_print(f";name parameter identified; warrior's name is {new_warrior.name}")
+            debug_print(f"- Name parameter identified; warrior's name is {new_warrior.name}")
             continue
+
+        if attributes[0].upper() not in o.opcodes:
+            # Identify psuedo-opcodes
+            if attributes[0].upper() == "FOR":
+                # For-loops duplicate instructions until the ROF keyword for an amount specified by the second attribute
+                if len(attributes) != 2:
+                    debug_print("Compiler error detected. Aborting...")
+                    error_list.append(f"Bad instruction at {line.strip()}\n(invalid FOR statement)")
+                
+                # Store loop information
+                repeats = evaluate_attribute_list(attributes, 1)[1]
+                loops.append(Loop(current_line, -1, repeats))
+                continue
+
+            if attributes[0].upper() == "ROF":
+                # Terminates the nearest active loop
+                if len(attributes) > 1:
+                    debug_print("Compiler error detected. Aborting...")
+                    error_list.append(f"Bad instruction at {line.strip()}\n(invalid ROF statement)")
+
+                loop_found = False
+                target_loop = None
+                for loop in reversed(loops):
+                    if loop.end_line != -1: continue
+
+                    loop.end_line = current_line
+                    loop_found = True
+                    target_loop = loop
+                    break
+
+                if not loop_found:
+                    debug_print("Compiler error detected. Aborting...")
+                    error_list.append(f"Bad instruction at {line.strip()}\n(no FOR to terminate)")
+                else:
+                    # Repeat all instructions in the target loop the specified number of times
+                    for i in range(target_loop.repeats - 1):
+                        for k in range(target_loop.start_line, target_loop.end_line):
+                            preprocessed_data.append(preprocessed_data[k])
+
+                    loops.remove(target_loop)
+
+                continue
+
+            # If the first attribute is not an opcode or psuedo-opcode, assume it is a label
+            try:
+                int(attributes[0])
+                # Labels cannot be purely numeric
+                debug_print("Compiler error detected. Aborting...")
+                error_list.append(f"Bad instruction at {line.strip()}\n(invalid opcode)")
+                continue
+            except: pass
+
+            labels[attributes[0]] = current_line
+            debug_print(f"- Label '{attributes[0]}' identified on line {current_line}")
+            attributes.pop(0)
+            if len(attributes) <= 0:
+                # Label has no further instruction
+                debug_print("Compiler error detected. Aborting...")
+                error_list.append(f"Bad instruction at {line.strip()}\n(invalid opcode)")
+                continue
+
+        for i in range(len(attributes)):
+            # Find inline comments and eliminate them
+            if attributes[i][0] != ";": continue
+            
+            attributes = attributes[:i - 1]
+
+        preprocessed_data.append(attributes)
+        current_line += 1
+    
+    debug_print(f"- Preprocessing complete, data length: " + str(len(preprocessed_data)) + " lines")
+
+    # Read each line individually and parse it into an Instruction object
+    for attributes in preprocessed_data:
+        load_line = o.Instruction(None, None, None, None, None, None)
+
+        debug_print("Reading line: " + " ".join(attributes))
 
         # Insert every attribute into the instruction object in order
         opcode_data = attributes[0].upper().split(".")
@@ -107,20 +157,28 @@ def compile_load_file(data, debug):
         else:
             debug_print(f"Valid opcode confirmed: {load_line.opcode}. No modifier declared, awaiting addressing modes to determine...")
 
-        # Extract the A-field addressing mode
-        a_mode = attributes[1][0:1]
-        if not a_mode in o.addressing_modes:
-            # None is declared; use default
-            load_line.a_mode_1 = "$"
-            debug_print("No A-field addressing mode detected, assuming relative...")
+        if len(attributes) > 1:
+            # Extract the A-field addressing mode
+            a_mode = attributes[1][0:1]
+            if not a_mode in o.addressing_modes:
+                # None is declared; use default
+                load_line.a_mode_1 = "$"
+                debug_print("No A-field addressing mode detected, assuming relative...")
+            else:
+                load_line.a_mode_1 = a_mode
+                attributes[1] = attributes[1][1:len(attributes[1])]
+
+            # Evaluates any expressions or labels in the following addresses
+            attributes = evaluate_attribute_list(attributes, 1)
+
+            load_line.address_1 = attributes[1]
+        
         else:
-            load_line.a_mode_1 = a_mode
-            attributes[1] = attributes[1][1:len(attributes[1])]
+            # No A-field specified
+            load_line.a_mode_1 = "$"
+            load_line.address_1 = 0
 
-        # Evaluates any expressions or labels in the following addresses
-        attributes = evaluate_attribute_list(attributes, 1)
-
-        # Ditto for B-field unless none is specified
+        # Ditto for B-field
         if len(attributes) > 2:
             b_mode = attributes[2][0:1]
             if not b_mode in o.addressing_modes:
@@ -132,14 +190,10 @@ def compile_load_file(data, debug):
 
             attributes = evaluate_attribute_list(attributes, 2)
 
-            # Assign the processed values to their appropariate locations
-            load_line.address_1 = attributes[1]
             load_line.address_2 = attributes[2]
 
         else:
-            # No B-field specified
             if opcode_data[0] != "DAT":
-                load_line.address_1 = attributes[1]
                 load_line.a_mode_2 = "$"
                 load_line.address_2 = 0
             else:
@@ -147,7 +201,7 @@ def compile_load_file(data, debug):
                 load_line.a_mode_2 = load_line.a_mode_1
                 load_line.a_mode_1 = "$"
                 load_line.address_1 = 0
-                load_line.address_2 = attributes[1]
+                load_line.address_2 = attributes[1] if len(attributes) >= 2 else 0
 
         if load_line.modifier is None:
             load_line.modifier = get_default_modifier(load_line)
@@ -155,8 +209,6 @@ def compile_load_file(data, debug):
 
         new_warrior.load_file.append(load_line)
         debug_print(f"Line completed. Load file output: " + o.parse_instruction_to_text(load_line))
-
-        current_line += 1
 
     if error_list == []:
         debug_print("Compiler operation completed successfully.")
@@ -196,7 +248,7 @@ def get_default_modifier(instruction : o.Instruction):
 def evaluate_attribute_list(attributes : list, target : int):
     debug_print(f"Initialising expression evaluation subroutine at position {target}...")
     # Check for the type of the target attribute; pure number, single label, or expression
-    if attributes[target][-1] == "," or len(attributes) - 1 <= target:
+    if attributes[target][-1] == "," or len(attributes) - 1 == target:
         # Attribute is either suffixed by a comma or the last attribute, and hence either a single label or a number
         attributes[target] = attributes[target].replace(",", "")
 
@@ -207,13 +259,13 @@ def evaluate_attribute_list(attributes : list, target : int):
             target_is_numeric = False
 
         if target_is_numeric:
-            debug_print("EXEVAL: Target is an address value. No further processing required...")
+            debug_print("- Target is an address value. No further processing required...")
             attributes[target] = int(attributes[target])
         else:
             # Target is a single label; check it against all known labels
             pass
 
-    debug_print("EXEVAL: Expression evaluation complete. Result: " + str(attributes[target]))
+    debug_print("- Expression evaluation complete. Result: " + str(attributes[target]))
     return attributes
 
 # For use as debug symbol
