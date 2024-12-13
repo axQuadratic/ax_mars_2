@@ -54,8 +54,8 @@ class Instruction:
 
     # Necessary to allow comparisons between instances by attributes
     def __eq__(self, other):
-        c1 = self.label == other.label and self.opcode == other.opcode and self.modifier == other.modifier
-        c2 = self.a_mode_1 == other.a_mode_1 and self.address_1 == other.address_1 and self.a_mode_2 == other.a_mode_2 and self.address_2 == other.address_2
+        c1 = self.opcode == other.opcode and self.modifier == other.modifier and self.a_mode_1 == other.a_mode_1
+        c2 = self.address_1 == other.address_1 and self.a_mode_2 == other.a_mode_2 and self.address_2 == other.address_2
         return c1 and c2
 
 class Warrior:

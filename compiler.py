@@ -5,10 +5,11 @@ import options as o
 # Labels are stored in the format "name": line
 labels = {}
 
-# Not currently implemented
-constants = {
+# Defined with the EQU opcode, some are predetermined
+default_constants = {
     "CORESIZE": 8000
 }
+constants = {}
 
 debug_enabled = False
 
@@ -22,11 +23,12 @@ class Loop:
 loops = []
 
 def compile_load_file(data, debug):
-    global labels, debug_enabled
+    global constants, labels, debug_enabled
 
     if data == []: return
     new_warrior = o.Warrior("Nameless", None, None, None, [])
     error_list = []
+    constants = default_constants
 
     if debug: debug_enabled = True
 
@@ -57,71 +59,104 @@ def compile_load_file(data, debug):
             debug_print(f"- Name parameter identified; warrior's name is {new_warrior.name}")
             continue
 
-        if attributes[0].upper() not in o.opcodes:
-            # Identify psuedo-opcodes
-            if attributes[0].upper() == "FOR":
-                # For-loops duplicate instructions until the ROF keyword for an amount specified by the second attribute
-                if len(attributes) != 2:
-                    debug_print("Compiler error detected. Aborting...")
-                    error_list.append(f"Bad instruction at {line.strip()}\n(invalid FOR statement)")
-                
-                # Store loop information
-                repeats = evaluate_attribute_list(attributes, 1)[1]
-                loops.append(Loop(current_line, -1, repeats))
-                continue
-
-            if attributes[0].upper() == "ROF":
-                # Terminates the nearest active loop
-                if len(attributes) > 1:
-                    debug_print("Compiler error detected. Aborting...")
-                    error_list.append(f"Bad instruction at {line.strip()}\n(invalid ROF statement)")
-
-                loop_found = False
-                target_loop = None
-                for loop in reversed(loops):
-                    if loop.end_line != -1: continue
-
-                    loop.end_line = current_line
-                    loop_found = True
-                    target_loop = loop
-                    break
-
-                if not loop_found:
-                    debug_print("Compiler error detected. Aborting...")
-                    error_list.append(f"Bad instruction at {line.strip()}\n(no FOR to terminate)")
-                else:
-                    # Repeat all instructions in the target loop the specified number of times
-                    for i in range(target_loop.repeats - 1):
-                        for k in range(target_loop.start_line, target_loop.end_line):
-                            preprocessed_data.append(preprocessed_data[k])
-
-                    loops.remove(target_loop)
-
-                continue
-
-            # If the first attribute is not an opcode or psuedo-opcode, assume it is a label
-            try:
-                int(attributes[0])
-                # Labels cannot be purely numeric
-                debug_print("Compiler error detected. Aborting...")
-                error_list.append(f"Bad instruction at {line.strip()}\n(invalid opcode)")
-                continue
-            except: pass
-
-            labels[attributes[0]] = current_line
-            debug_print(f"- Label '{attributes[0]}' identified on line {current_line}")
-            attributes.pop(0)
-            if len(attributes) <= 0:
-                # Label has no further instruction
-                debug_print("Compiler error detected. Aborting...")
-                error_list.append(f"Bad instruction at {line.strip()}\n(invalid opcode)")
-                continue
-
         for i in range(len(attributes)):
             # Find inline comments and eliminate them
             if attributes[i][0] != ";": continue
             
-            attributes = attributes[:i - 1]
+            attributes = attributes[:i]
+            break
+
+        if attributes[0].upper() not in o.opcodes:
+            # Identify psuedo-opcodes and labels
+            match attributes[0].upper():
+                case "FOR":
+                    # For-loops duplicate instructions until the ROF keyword for an amount specified by the second attribute
+                    if len(attributes) != 2:
+                        debug_print("Compiler error detected. Aborting...")
+                        error_list.append(f"Bad instruction at {line.strip()}\n(invalid FOR statement)")
+                    
+                    # Store loop information
+                    repeats = evaluate_attribute_list(attributes, 1)[1]
+                    loops.append(Loop(current_line, -1, repeats))
+                    debug_print(f"- FOR loop identified; repeats: {repeats}")
+                    continue
+
+                case "ROF":
+                    # Terminates the nearest active loop
+                    if len(attributes) > 1:
+                        debug_print("Compiler error detected. Aborting...")
+                        error_list.append(f"Bad instruction at {line.strip()}\n(invalid ROF statement)")
+
+                    loop_found = False
+                    target_loop = None
+                    for loop in reversed(loops):
+                        if loop.end_line != -1: continue
+
+                        loop.end_line = current_line
+                        loop_found = True
+                        target_loop = loop
+                        break
+
+                    if not loop_found:
+                        debug_print("Compiler error detected. Aborting...")
+                        error_list.append(f"Bad instruction at {line.strip()}\n(no FOR to terminate)")
+                    else:
+                        debug_print(f"- Termination of FOR {target_loop.repeats} detected; evaluating loop result...")
+                        # Repeat all instructions in the target loop the specified number of times
+                        for i in range(target_loop.repeats - 1):
+                            for k in range(target_loop.start_line, target_loop.end_line):
+                                preprocessed_data.append(preprocessed_data[k])
+                                current_line += 1
+
+                        loops.remove(target_loop)
+
+                    continue
+
+                case _:
+                    # If the first attribute is not an opcode or psuedo-opcode, assume it is a label
+                    try:
+                        int(attributes[0])
+                        # Labels cannot be purely numeric
+                        debug_print("Compiler error detected. Aborting...")
+                        error_list.append(f"Bad instruction at {line.strip()}\n(invalid symbol)")
+                        continue
+                    except: pass
+
+                    if len(attributes) >= 2:
+                        if attributes[1].upper() == "EQU":
+                            # Defines a constant
+                            if len(attributes) != 3:
+                                # Invalid definition
+                                debug_print("Compiler error detected. Aborting...")
+                                error_list.append(f"Bad instruction at {line.strip()}\n(invalid symbol)")
+                                continue
+
+                            if attributes[0] in labels.keys():
+                                # Constant is already declared as a label
+                                debug_print("Compiler error detected. Aborting...")
+                                error_list.append(f"Bad instruction at {line.strip()}\n(symbol conflict)")
+                                continue
+
+                            debug_print(f"- Constant '{attributes[0]}' defined as {attributes[2]}")
+                            constants[attributes[0]] = attributes[2]
+                            continue
+
+                    # Defines a label
+                    if attributes[0] in labels.keys():
+                        # Label is already declared as a constant
+                        debug_print("Compiler error detected. Aborting...")
+                        error_list.append(f"Bad instruction at {line.strip()}\n(symbol conflict)")
+                        continue
+
+                    labels[attributes[0]] = current_line
+                    debug_print(f"- Label '{attributes[0]}' identified on line {current_line}")
+                    attributes.pop(0)
+
+                    if len(attributes) <= 0:
+                        # Label has no further instruction
+                        debug_print("Compiler error detected. Aborting...")
+                        error_list.append(f"Bad instruction at {line.strip()}\n(invalid symbol)")
+                        continue
 
         preprocessed_data.append(attributes)
         current_line += 1
@@ -215,6 +250,8 @@ def compile_load_file(data, debug):
     else:
         debug_print(f"Compiler operation completed. {len(error_list)} invalid lines ignored.")
 
+    print(constants, "\n", labels)
+
     return new_warrior, error_list
 
 def get_default_modifier(instruction : o.Instruction):
@@ -247,23 +284,23 @@ def get_default_modifier(instruction : o.Instruction):
         
 def evaluate_attribute_list(attributes : list, target : int):
     debug_print(f"Initialising expression evaluation subroutine at position {target}...")
-    # Check for the type of the target attribute; pure number, single label, or expression
+    # Check for the type of the target attribute; pure number, single symbol, or expression
     if attributes[target][-1] == "," or len(attributes) - 1 == target:
         # Attribute is either suffixed by a comma or the last attribute, and hence either a single label or a number
         attributes[target] = attributes[target].replace(",", "")
 
         target_is_numeric = True
-        try: 
-            int(attributes[target])
-        except:
-            target_is_numeric = False
+        try: int(attributes[target])
+        except: target_is_numeric = False
 
         if target_is_numeric:
             debug_print("- Target is an address value. No further processing required...")
             attributes[target] = int(attributes[target])
         else:
-            # Target is a single label; check it against all known labels
-            pass
+            # Target is a single symbol; check it against all known constants and labels
+            for constant in constants.keys():
+                if attributes[target] != constant: continue
+
 
     debug_print("- Expression evaluation complete. Result: " + str(attributes[target]))
     return attributes

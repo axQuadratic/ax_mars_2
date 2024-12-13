@@ -51,7 +51,6 @@ class App():
         # Create UI elements for the main window
         self.top_container = ctk.CTkFrame(o.root)
         self.state_window_button = ctk.CTkButton(self.top_container, text="No Core Loaded", command=self.open_state_window, state=ctk.DISABLED)
-        self.pspace_button = ctk.CTkButton(self.top_container, text="View P-Space [WIP]", state=ctk.DISABLED)
         self.setup_button = ctk.CTkButton(self.top_container, text="Setup", command=self.open_setup_menu)
         self.help_button = ctk.CTkButton(self.top_container, text="Help [WIP]", state=ctk.DISABLED)
         self.options_button = ctk.CTkButton(self.top_container, text="Options", command=self.open_options_menu)
@@ -69,8 +68,7 @@ class App():
         self.top_container.grid(row=0, column=0, sticky="nsew")
         self.bottom_container.grid(row=2, column=0, sticky="nsew")
 
-        self.state_window_button.grid(row=0, column=0, sticky="nsew")
-        self.pspace_button.grid(row=2, column=0, sticky="nsew")
+        self.state_window_button.grid(row=0, column=0, rowspan=3, sticky="nsew")
         self.setup_button.grid(row=0, column=2, rowspan=3, sticky="nsew")
         self.help_button.grid(row=0, column=4, sticky="nsew")
         self.options_button.grid(row=2, column=4, sticky="nsew")
@@ -452,21 +450,23 @@ class App():
         self.state_canvas = ctk.CTkCanvas(self.state_window, bg="black")
         
         self.bottom_bar_container = ctk.CTkFrame(self.state_window, width=0, height=0)
+        self.pspace_button = ctk.CTkButton(self.bottom_bar_container, text="View P-Space [WIP]", state=ctk.DISABLED)
         self.detail_button = ctk.CTkButton(self.bottom_bar_container, command=self.open_detail_window, text="Open Detail Viewer")
 
         self.state_canvas.grid(row=0, column=0, columnspan=2, sticky="nsew")
 
         self.bottom_bar_container.grid(row=1, column=0, sticky="nsew")
+        self.pspace_button.grid(row=0, column=5, sticky="nsew")
         self.detail_button.grid(row=0, column=6, sticky="nsew")
 
         self.state_window.grid_rowconfigure(0, weight=1)
         self.state_window.grid_rowconfigure(1, weight=0) # All widgets on this row are forced to their minimum size
         self.state_window.grid_columnconfigure(0, weight=1)
 
-        self.bottom_bar_container.grid_rowconfigure(0, weight=1)
-        self.bottom_bar_container.grid_columnconfigure([0, 2, 4, 6], weight=10)
+        self.bottom_bar_container.grid_rowconfigure([0, 1], weight=1)
+        self.bottom_bar_container.grid_columnconfigure([0, 2, 6], weight=10)
         self.bottom_bar_container.grid_columnconfigure([1, 3], weight=1)
-        self.bottom_bar_container.grid_columnconfigure(5, weight=20)
+        self.bottom_bar_container.grid_columnconfigure(4, weight=20)
 
         o.update_requested = True
 
