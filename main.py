@@ -1,4 +1,5 @@
 # The main program file; acts primarily as UI manager
+print("Log active, launching Tailwind v0.8...")
 
 import customtkinter as ctk
 from tkinter.messagebox import showinfo
@@ -22,7 +23,7 @@ import process
 
 o.root.geometry("450x200")
 o.root.resizable(False, False)
-o.root.title("Tailwind v0.6")
+o.root.title("Tailwind v0.8")
 o.root.protocol("WM_DELETE_WINDOW", o.close_all_threads)
 
 # Create the main UI class
@@ -50,7 +51,7 @@ class App():
 
         # Create UI elements for the main window
         self.top_container = ctk.CTkFrame(o.root)
-        self.state_window_button = ctk.CTkButton(self.top_container, text="No Core Loaded", command=self.open_state_window, state=ctk.DISABLED)
+        self.state_window_button = ctk.CTkButton(self.top_container, text="View Core", command=self.open_state_window, state=ctk.DISABLED)
         self.setup_button = ctk.CTkButton(self.top_container, text="Setup", command=self.open_setup_menu)
         self.help_button = ctk.CTkButton(self.top_container, text="Help [WIP]", state=ctk.DISABLED)
         self.options_button = ctk.CTkButton(self.top_container, text="Options", command=self.open_options_menu)
@@ -723,7 +724,6 @@ class App():
         # Set the root window's icon to the loaded theme
         o.root.iconbitmap(f"assets/icons/icon_{o.user_config['selected_theme']}.ico")
 
-print("Log active, launching Tailwind v0.6...")
 main = App()
 print("Tailwind loaded successfully.")
 o.root.mainloop()

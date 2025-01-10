@@ -7,9 +7,11 @@ labels = {}
 
 # Defined with the EQU opcode, some are predetermined
 default_constants = {
-    "CORESIZE": 8000
+    "CORESIZE": "8000"
 }
 constants = {}
+
+error_list = []
 
 debug_enabled = False
 
@@ -23,12 +25,13 @@ class Loop:
 loops = []
 
 def compile_load_file(data, debug):
-    global constants, labels, debug_enabled
+    global constants, labels, debug_enabled, error_list
 
     if data == []: return
     new_warrior = o.Warrior("Nameless", None, None, None, [])
     error_list = []
     constants = default_constants
+    labels = {}
 
     if debug: debug_enabled = True
 
@@ -66,7 +69,7 @@ def compile_load_file(data, debug):
             attributes = attributes[:i]
             break
 
-        if attributes[0].upper() not in o.opcodes:
+        if attributes[0].upper().split(".")[0] not in o.opcodes:
             # Identify psuedo-opcodes and labels
             match attributes[0].upper():
                 case "FOR":
@@ -74,6 +77,7 @@ def compile_load_file(data, debug):
                     if len(attributes) != 2:
                         debug_print("Compiler error detected. Aborting...")
                         error_list.append(f"Bad instruction at {line.strip()}\n(invalid FOR statement)")
+                        break
                     
                     # Store loop information
                     repeats = evaluate_attribute_list(attributes, 1)[1]
@@ -86,6 +90,7 @@ def compile_load_file(data, debug):
                     if len(attributes) > 1:
                         debug_print("Compiler error detected. Aborting...")
                         error_list.append(f"Bad instruction at {line.strip()}\n(invalid ROF statement)")
+                        break
 
                     loop_found = False
                     target_loop = None
@@ -100,6 +105,8 @@ def compile_load_file(data, debug):
                     if not loop_found:
                         debug_print("Compiler error detected. Aborting...")
                         error_list.append(f"Bad instruction at {line.strip()}\n(no FOR to terminate)")
+                        break
+
                     else:
                         debug_print(f"- Termination of FOR {target_loop.repeats} detected; evaluating loop result...")
                         # Repeat all instructions in the target loop the specified number of times
@@ -119,7 +126,7 @@ def compile_load_file(data, debug):
                         # Labels cannot be purely numeric
                         debug_print("Compiler error detected. Aborting...")
                         error_list.append(f"Bad instruction at {line.strip()}\n(invalid symbol)")
-                        continue
+                        break
                     except: pass
 
                     if len(attributes) >= 2:
@@ -129,13 +136,13 @@ def compile_load_file(data, debug):
                                 # Invalid definition
                                 debug_print("Compiler error detected. Aborting...")
                                 error_list.append(f"Bad instruction at {line.strip()}\n(invalid symbol)")
-                                continue
+                                break
 
                             if attributes[0] in labels.keys():
                                 # Constant is already declared as a label
                                 debug_print("Compiler error detected. Aborting...")
                                 error_list.append(f"Bad instruction at {line.strip()}\n(symbol conflict)")
-                                continue
+                                break
 
                             debug_print(f"- Constant '{attributes[0]}' defined as {attributes[2]}")
                             constants[attributes[0]] = attributes[2]
@@ -146,7 +153,7 @@ def compile_load_file(data, debug):
                         # Label is already declared as a constant
                         debug_print("Compiler error detected. Aborting...")
                         error_list.append(f"Bad instruction at {line.strip()}\n(symbol conflict)")
-                        continue
+                        break
 
                     labels[attributes[0]] = current_line
                     debug_print(f"- Label '{attributes[0]}' identified on line {current_line}")
@@ -156,14 +163,22 @@ def compile_load_file(data, debug):
                         # Label has no further instruction
                         debug_print("Compiler error detected. Aborting...")
                         error_list.append(f"Bad instruction at {line.strip()}\n(invalid symbol)")
-                        continue
+                        break
 
         preprocessed_data.append(attributes)
         current_line += 1
+
+    # Insert all constants into the preprocessed data
+    for constant in constants.keys():
+        debug_print(f"- Applying constant {constant}...")
+        for i in range(len(preprocessed_data)):
+            for k in range(len(preprocessed_data[i])):
+                preprocessed_data[i][k] = preprocessed_data[i][k].replace(constant, constants[constant])
     
     debug_print(f"- Preprocessing complete, data length: " + str(len(preprocessed_data)) + " lines")
 
     # Read each line individually and parse it into an Instruction object
+    current_line = 0
     for attributes in preprocessed_data:
         load_line = o.Instruction(None, None, None, None, None, None)
 
@@ -180,12 +195,12 @@ def compile_load_file(data, debug):
             # Bad opcode
             debug_print("Compiler error detected. Aborting...")
             error_list.append(f"Bad instruction at '{line.strip()}'\n(invalid opcode)")
-            new_warrior.load_file.append(load_line)
-            continue
+            break
         if opcode_data[0] == "LDP" or opcode_data[0] == "STP":
             # P-space is not yet implemented
             debug_print("Compiler error detected. Aborting...")
             error_list.append(f"Bad instruction at '{line.strip()}'\n(P-space not supported)")
+            break
 
         if load_line.modifier is not None:
             debug_print(f"Valid opcode and modifier confirmed: {load_line.opcode}.{load_line.modifier}")
@@ -204,7 +219,12 @@ def compile_load_file(data, debug):
                 attributes[1] = attributes[1][1:len(attributes[1])]
 
             # Evaluates any expressions or labels in the following addresses
-            attributes = evaluate_attribute_list(attributes, 1)
+            attributes = evaluate_attribute_list(attributes, 1, current_line)
+            if attributes is None:
+                # Complex expression evaluation failure
+                debug_print("Compiler error detected, aborting...")
+                error_list.append(f"Invalid A-field expression at line {current_line + 1}")
+                break
 
             load_line.address_1 = attributes[1]
         
@@ -220,10 +240,14 @@ def compile_load_file(data, debug):
                 load_line.a_mode_2 = "$"
                 debug_print("No B-field addressing mode detected, assuming relative...")
             else:
-                load_line.a_mode_2 = a_mode
+                load_line.a_mode_2 = b_mode
                 attributes[2] = attributes[2][1:len(attributes[2])]
 
-            attributes = evaluate_attribute_list(attributes, 2)
+            attributes = evaluate_attribute_list(attributes, 2, current_line)
+            if attributes is None:
+                debug_print("Compiler error detected, aborting...")
+                error_list.append(f"Invalid B-field expression at line {current_line + 1}")
+                break
 
             load_line.address_2 = attributes[2]
 
@@ -245,12 +269,12 @@ def compile_load_file(data, debug):
         new_warrior.load_file.append(load_line)
         debug_print(f"Line completed. Load file output: " + o.parse_instruction_to_text(load_line))
 
+        current_line += 1
+
     if error_list == []:
         debug_print("Compiler operation completed successfully.")
     else:
         debug_print(f"Compiler operation completed. {len(error_list)} invalid lines ignored.")
-
-    print(constants, "\n", labels)
 
     return new_warrior, error_list
 
@@ -282,11 +306,13 @@ def get_default_modifier(instruction : o.Instruction):
         case _:
             return "B"
         
-def evaluate_attribute_list(attributes : list, target : int):
+def evaluate_attribute_list(attributes : list, target : int, current_line : int):
+    global error_list
+
     debug_print(f"Initialising expression evaluation subroutine at position {target}...")
     # Check for the type of the target attribute; pure number, single symbol, or expression
     if attributes[target][-1] == "," or len(attributes) - 1 == target:
-        # Attribute is either suffixed by a comma or the last attribute, and hence either a single label or a number
+        # Attribute is either suffixed by a comma or the last attribute, and hence either a single-attribute expression or a number
         attributes[target] = attributes[target].replace(",", "")
 
         target_is_numeric = True
@@ -297,13 +323,29 @@ def evaluate_attribute_list(attributes : list, target : int):
             debug_print("- Target is an address value. No further processing required...")
             attributes[target] = int(attributes[target])
         else:
-            # Target is a single symbol; check it against all known constants and labels
-            for constant in constants.keys():
-                if attributes[target] != constant: continue
+            # Target is a single symbol; check it against all known labels
+            if attributes[target] in list(labels.keys()):
+                # Replace the label with the relative position of the target line
+                debug_print(f"- Label '{attributes[target]}' matched to instruction at line {current_line}")
+                attributes[target] = labels[attributes[target]] - current_line
 
+            else:
+                # If target is not found in label list, attempt complex expression evaluation
+                attributes[target] += "," # Replace removed comma
+                attributes = evaluate_complex_expression(attributes, target, current_line)
 
-    debug_print("- Expression evaluation complete. Result: " + str(attributes[target]))
+    else:
+        # Attribute is not terminated; begin complex expression evaluation
+        attributes = evaluate_complex_expression(attributes, target, current_line)
+
+    if attributes is not None: debug_print("- Expression evaluation complete. Result: " + str(attributes[target]))
+
     return attributes
+
+def evaluate_complex_expression(attributes : list, target : int, current_line : int):
+    global error_list
+
+    return None
 
 # For use as debug symbol
 def debug_print(text):
