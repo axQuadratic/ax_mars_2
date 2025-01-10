@@ -169,10 +169,12 @@ def compile_load_file(data, debug):
         current_line += 1
 
     # Insert all constants into the preprocessed data
-    for constant in constants.keys():
+    # Iteration in inverse alphabetical order is done to prevent erroneous mapping when part of one constant is equal to another
+    for constant in reversed(sorted(list(constants.keys()))):
         debug_print(f"- Applying constant {constant}...")
         for i in range(len(preprocessed_data)):
             for k in range(len(preprocessed_data[i])):
+                if k == 0: continue # Avoid replacing opcodes, labels, and other constant declarations
                 preprocessed_data[i][k] = preprocessed_data[i][k].replace(constant, constants[constant])
     
     debug_print(f"- Preprocessing complete, data length: " + str(len(preprocessed_data)) + " lines")
@@ -180,6 +182,9 @@ def compile_load_file(data, debug):
     # Read each line individually and parse it into an Instruction object
     current_line = 0
     for attributes in preprocessed_data:
+        # End processing early in case of errors
+        if len(error_list) > 0: break
+
         load_line = o.Instruction(None, None, None, None, None, None)
 
         debug_print("Reading line: " + " ".join(attributes))
@@ -266,6 +271,12 @@ def compile_load_file(data, debug):
             load_line.modifier = get_default_modifier(load_line)
             debug_print(f"Addressing modes used to determine opcode's modifier, result: {load_line.opcode}.{load_line.modifier}")
 
+        if len(attributes) > 3:
+            # Too many attributes!
+            debug_print("Compiler error detected, aborting...")
+            error_list.append(f"Bad instruction at '{line.strip()}'\n(too many parameters)")
+            break
+
         new_warrior.load_file.append(load_line)
         debug_print(f"Line completed. Load file output: " + o.parse_instruction_to_text(load_line))
 
@@ -345,7 +356,49 @@ def evaluate_attribute_list(attributes : list, target : int, current_line : int)
 def evaluate_complex_expression(attributes : list, target : int, current_line : int):
     global error_list
 
-    return None
+    expr_attributes = [attributes[target]]
+
+    # Determine the end of the current expression for evaluation
+    # If the loop completes, the end of the instruction is reached; if a comma is found, terminate early
+    if expr_attributes[0] != ",":
+        i = 1
+        while len(attributes) > target + i:
+            new_attribute = attributes.pop(target + i)
+            if new_attribute[-1] == ",":
+                expr_attributes.append(new_attribute.replace(",", ""))
+                break
+            else:
+                expr_attributes.append(new_attribute)
+    else:
+        # Expression only covers one attribute
+        expr_attributes[0] = expr_attributes[0].replace(",", "")
+
+    # Check for labels in the collected symbols
+    # Iteration in inverse alphabetical order is done to prevent erroneous mapping when part of one label is equal to another
+    for label in reversed(sorted(list(labels.keys()))):
+        for i in range(len(expr_attributes)):
+            if label in expr_attributes[i]:
+                # Replace the label with the relative position of the target line
+                debug_print(f"- Label '{label}' matched to instruction at line {current_line}")
+                expr_attributes[i] = expr_attributes.replace(label, str(labels[label] - current_line))
+
+    expression = " ".join(expr_attributes)
+
+    # Map Redcode operands, which are identical to C (&&, ||, !), to Python operands (and, or, not)
+    expression = expression.replace("&&", " and ")
+    expression = expression.replace("||", " or ")
+    expression = expression.replace("!", "not ")
+
+    # Evaluate and return the modified attribute list
+    try:
+        attributes[target] = int(eval(expression))
+        debug_print(f"- Expression {expression} evaluated; result: {attributes[target]}")
+        return attributes
+    
+    except:
+        debug_print(f"- Expression evaluation ERROR at: {expression}")
+        # The compiler recognises this as an evaluation failure
+        return None
 
 # For use as debug symbol
 def debug_print(text):
