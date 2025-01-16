@@ -30,7 +30,7 @@ def compile_load_file(data, debug):
     if data == []: return
     new_warrior = o.Warrior("Nameless", None, None, None, [])
     error_list = []
-    constants = default_constants
+    constants = default_constants.copy()
     labels = {}
 
     if debug: debug_enabled = True
@@ -80,7 +80,7 @@ def compile_load_file(data, debug):
                         break
                     
                     # Store loop information
-                    repeats = evaluate_attribute_list(attributes, 1)[1]
+                    repeats = evaluate_attribute_list(attributes, 1, current_line)[1]
                     loops.append(Loop(current_line, -1, repeats))
                     debug_print(f"- FOR loop identified; repeats: {repeats}")
                     continue
@@ -112,7 +112,7 @@ def compile_load_file(data, debug):
                         # Repeat all instructions in the target loop the specified number of times
                         for i in range(target_loop.repeats - 1):
                             for k in range(target_loop.start_line, target_loop.end_line):
-                                preprocessed_data.append(preprocessed_data[k])
+                                preprocessed_data.append(preprocessed_data[k].copy())
                                 current_line += 1
 
                         loops.remove(target_loop)
@@ -144,6 +144,13 @@ def compile_load_file(data, debug):
                                 error_list.append(f"Bad instruction at {line.strip()}\n(symbol conflict)")
                                 break
 
+                            
+                            if not attributes[0].isalnum():
+                                # Constant is not alphanumeric
+                                debug_print("Compiler error detected. Aborting...")
+                                error_list.append(f"Bad instruction at {line.strip()}\n(invalid symbol)")
+                                break
+
                             debug_print(f"- Constant '{attributes[0]}' defined as {attributes[2]}")
                             constants[attributes[0]] = attributes[2]
                             continue
@@ -153,6 +160,12 @@ def compile_load_file(data, debug):
                         # Label is already declared as a constant
                         debug_print("Compiler error detected. Aborting...")
                         error_list.append(f"Bad instruction at {line.strip()}\n(symbol conflict)")
+                        break
+
+                    if not attributes[0].isalnum():
+                        # Label is not alphanumeric
+                        debug_print("Compiler error detected. Aborting...")
+                        error_list.append(f"Bad instruction at {line.strip()}\n(invalid symbol)")
                         break
 
                     labels[attributes[0]] = current_line
@@ -169,13 +182,45 @@ def compile_load_file(data, debug):
         current_line += 1
 
     # Insert all constants into the preprocessed data
-    # Iteration in inverse alphabetical order is done to prevent erroneous mapping when part of one constant is equal to another
-    for constant in reversed(sorted(list(constants.keys()))):
+    for constant in constants.keys():
         debug_print(f"- Applying constant {constant}...")
         for i in range(len(preprocessed_data)):
             for k in range(len(preprocessed_data[i])):
                 if k == 0: continue # Avoid replacing opcodes, labels, and other constant declarations
-                preprocessed_data[i][k] = preprocessed_data[i][k].replace(constant, constants[constant])
+
+                # Ensure only exact matches are replaced by checking for surrounding alphanumeric characters
+                search_offset = 0
+                while constant in preprocessed_data[i][k]:
+                    first_char_not_alnum = False
+                    last_char_not_alnum = False
+                    search_string = str(preprocessed_data[i][k][search_offset:])
+                    constant_location = search_string.find(constant)
+
+                    if constant_location == -1:
+                        # Constant is not present in the offset string
+                        break
+                    
+                    if constant_location == 0:
+                        # Constant is at first position in attribute
+                        first_char_not_alnum = True
+                    elif not search_string[constant_location - 1].isalnum():
+                        # Char before the constant is not alphanumeric (whitespace or a symbol i.e. +, -, |) and it is thus safe to replace
+                        first_char_not_alnum = True
+
+                    if constant_location + len(constant) >= len(search_string):
+                        # Constant is at last position in the attribute
+                        last_char_not_alnum = True
+                    elif not search_string[constant_location + len(constant)].isalnum():
+                        # Char after the constant is not alphanumeric
+                        last_char_not_alnum = True
+
+                    if first_char_not_alnum and last_char_not_alnum:
+                        # Replace the first occurrence of the constant in the substring, which should always correspond to the tested positions
+                        preprocessed_data[i][k] = str(preprocessed_data[i][k][:search_offset]) + search_string.replace(constant, constants[constant], 1)
+                    
+                    else:
+                        # Discard the checked part of the string to allow for offset searches
+                        search_offset += constant_location + len(constant)
     
     debug_print(f"- Preprocessing complete, data length: " + str(len(preprocessed_data)) + " lines")
 
@@ -187,7 +232,7 @@ def compile_load_file(data, debug):
 
         load_line = o.Instruction(None, None, None, None, None, None)
 
-        debug_print("Reading line: " + " ".join(attributes))
+        debug_print("Reading line: " + str(attributes))
 
         # Insert every attribute into the instruction object in order
         opcode_data = attributes[0].upper().split(".")
@@ -360,7 +405,7 @@ def evaluate_complex_expression(attributes : list, target : int, current_line : 
 
     # Determine the end of the current expression for evaluation
     # If the loop completes, the end of the instruction is reached; if a comma is found, terminate early
-    if expr_attributes[0] != ",":
+    if expr_attributes[0][-1] != ",":
         i = 1
         while len(attributes) > target + i:
             new_attribute = attributes.pop(target + i)
@@ -375,12 +420,44 @@ def evaluate_complex_expression(attributes : list, target : int, current_line : 
 
     # Check for labels in the collected symbols
     # Iteration in inverse alphabetical order is done to prevent erroneous mapping when part of one label is equal to another
-    for label in reversed(sorted(list(labels.keys()))):
+    for label in labels.keys():
         for i in range(len(expr_attributes)):
             if label in expr_attributes[i]:
-                # Replace the label with the relative position of the target line
-                debug_print(f"- Label '{label}' matched to instruction at line {current_line}")
-                expr_attributes[i] = expr_attributes.replace(label, str(labels[label] - current_line))
+
+                # Ensure only exact matches are replaced by checking for surrounding alphanumeric characters
+                search_offset = 0
+                while label in expr_attributes[i]:
+                    first_char_not_alnum = False
+                    last_char_not_alnum = False
+                    search_string = str(expr_attributes[i][search_offset:])
+                    label_location = search_string.find(label)
+
+                    if label_location == -1:
+                        # Constant is not present in the offset string
+                        break
+                    
+                    if label_location == 0:
+                        # Constant is at first position in attribute
+                        first_char_not_alnum = True
+                    elif not search_string[label_location - 1].isalnum():
+                        # Char before the label is not alphanumeric (whitespace or a symbol i.e. +, -, |) and it is thus safe to replace
+                        first_char_not_alnum = True
+
+                    if label_location + len(label) >= len(search_string):
+                        # Constant is at last position in the attribute
+                        last_char_not_alnum = True
+                    elif not search_string[label_location + len(label)].isalnum():
+                        # Char after the label is not alphanumeric
+                        last_char_not_alnum = True
+
+                    if first_char_not_alnum and last_char_not_alnum:
+                        # Replace the first occurrence of the label in the substring with the 
+                        debug_print(f"- Label '{label}' matched to instruction at line {current_line}")
+                        expr_attributes[i] = str(expr_attributes[i][:search_offset]) + search_string.replace(label, str(labels[label] - current_line), 1)
+                    
+                    else:
+                        # Discard the checked part of the string to allow for offset searches
+                        search_offset += label_location + len(label)
 
     expression = " ".join(expr_attributes)
 
@@ -395,8 +472,8 @@ def evaluate_complex_expression(attributes : list, target : int, current_line : 
         debug_print(f"- Expression {expression} evaluated; result: {attributes[target]}")
         return attributes
     
-    except:
-        debug_print(f"- Expression evaluation ERROR at: {expression}")
+    except Exception as e:
+        debug_print(f"- Expression evaluation ERROR at {expression}: " + str(e))
         # The compiler recognises this as an evaluation failure
         return None
 
