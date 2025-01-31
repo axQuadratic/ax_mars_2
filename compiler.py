@@ -28,7 +28,7 @@ def compile_load_file(data, debug):
     global constants, labels, debug_enabled, error_list
 
     if data == []: return
-    new_warrior = o.Warrior("Nameless", None, None, None, [])
+    new_warrior = o.Warrior("Nameless", None, None, None, [], [])
     error_list = []
     constants = default_constants.copy()
     labels = {}
@@ -54,12 +54,15 @@ def compile_load_file(data, debug):
 
         if attributes[0][0] == ";":
             # Line is a comment
-            if attributes[0][1:len(attributes[0])] == "name" or attributes[1] == "name":
+            if attributes[0][1:] == "name" or attributes[1] == "name":
                 new_warrior.name = " ".join(attributes[1:len(attributes)])
-            else:
-                continue
+                debug_print(f"- Name parameter identified; warrior's name is {new_warrior.name}")
 
-            debug_print(f"- Name parameter identified; warrior's name is {new_warrior.name}")
+            elif attributes[0][1:] == "assert" or attributes[1] == "assert":
+                # Evaluate the specified assert statement
+                debug_print("Assert statement identified, saving expression for evaluation...")
+                new_warrior.asserts.append(" ".join(str(attribute) for attribute in attributes[1:]))
+
             continue
 
         for i in range(len(attributes)):
@@ -451,7 +454,7 @@ def evaluate_complex_expression(attributes : list, target : int, current_line : 
                         last_char_not_alnum = True
 
                     if first_char_not_alnum and last_char_not_alnum:
-                        # Replace the first occurrence of the label in the substring with the 
+                        # Replace the first occurrence of the label in the substring
                         debug_print(f"- Label '{label}' matched to instruction at line {current_line}")
                         expr_attributes[i] = str(expr_attributes[i][:search_offset]) + search_string.replace(label, str(labels[label] - current_line), 1)
                     
@@ -471,11 +474,15 @@ def evaluate_complex_expression(attributes : list, target : int, current_line : 
         attributes[target] = int(eval(expression))
         debug_print(f"- Expression {expression} evaluated; result: {attributes[target]}")
         return attributes
-    
+
     except Exception as e:
         debug_print(f"- Expression evaluation ERROR at {expression}: " + str(e))
         # The compiler recognises this as an evaluation failure
         return None
+    
+def is_assert_valid(expression : str):
+    # Called on apply of a setup; if any of these 
+    pass
 
 # For use as debug symbol
 def debug_print(text):

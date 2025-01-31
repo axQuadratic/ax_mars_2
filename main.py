@@ -100,7 +100,7 @@ class App():
         self.speed_control.set(0)
 
     def render_state(self):
-        # Runs five times per second; executes the render queue and checks for simulation completion
+        # Runs ftwice per second; executes the render queue and checks for simulation completion
             self.update_core_label()
             if o.update_requested:
                 self.update_state_canvas()
@@ -111,7 +111,7 @@ class App():
                 self.pause_button.configure(text="Simulation Complete", state=ctk.DISABLED)
                 self.one_step_button.configure(state=ctk.DISABLED)
             
-            o.root.after(20, self.render_state)
+            o.root.after(50, self.render_state)
 
     def change_speed(self, new_speed):
         if new_speed == "max":
@@ -139,7 +139,7 @@ class App():
 
         self.setup_window = ctk.CTkToplevel(o.root)
         self.setup_window.title("Match Options")
-        self.setup_window.geometry("500x275")
+        self.setup_window.geometry("500x300")
         self.setup_window.resizable(False, False)
         self.setup_window.after(201, lambda: self.setup_window.iconbitmap(f"assets/icons/icon_{o.user_config['selected_theme']}.ico")) # Workaround for a silly CTk behaviour which sets the icon only after 200ms
         self.setup_window.grab_set()
@@ -168,8 +168,11 @@ class App():
         self.max_length_label = ctk.CTkLabel(self.misc_container, text="Max. Program Length:")
         self.max_length_input = ctk.CTkEntry(self.misc_container, placeholder_text="Length...")
 
-        self.error_label = ctk.CTkLabel(self.setup_window, text_color="red", text="")
-        self.apply_button = ctk.CTkButton(self.setup_window, text="Apply", command=lambda: self.apply_setup(self.core_size_input.get(), self.max_cycle_input.get(), self.max_length_input.get(), random_core.get()))
+        self.setup_bottom_container = ctk.CTkFrame(self.setup_window)
+        self.error_label = ctk.CTkLabel(self.setup_bottom_container, text_color="red", text="")
+        self.save_match_button = ctk.CTkButton(self.setup_bottom_container, text="Save Settings to File", command=lambda: self.validate_setup(self.core_size_input.get(), self.max_cycle_input.get(), self.max_length_input.get(), random_core.get(), True))
+        self.apply_button = ctk.CTkButton(self.setup_bottom_container, text="Apply", command=lambda: self.validate_setup(self.core_size_input.get(), self.max_cycle_input.get(), self.max_length_input.get(), random_core.get()))
+        self.load_match_button = ctk.CTkButton(self.setup_bottom_container, text="Import Match Settings", command=self.load_trsm_file)
 
         self.warrior_container.grid(row=0, column=0, rowspan=2, sticky="nsew")
         self.core_size_container.grid(row=0, column=2, sticky="new")
@@ -192,8 +195,11 @@ class App():
         self.max_length_label.grid(row=4, column=0, sticky="nsew")
         self.max_length_input.grid(row=5, column=0, sticky="nsew")
 
-        self.error_label.grid(row=2, column=0, columnspan=3, sticky="nsew")
-        self.apply_button.grid(row=3, column=0, columnspan=3, sticky="sew")
+        self.setup_bottom_container.grid(row=2, column=0, rowspan=2, columnspan=3, sticky="nsew")
+        self.error_label.grid(row=0, column=0, columnspan=5, sticky="nsew")
+        self.save_match_button.grid(row=1, column=0, sticky="nsew")
+        self.apply_button.grid(row=1, column=2, sticky="nsew")
+        self.load_match_button.grid(row=1, column=4, sticky="nsew")
 
         self.setup_window.grid_rowconfigure([0, 1, 2], weight=1)
         self.setup_window.grid_columnconfigure(1, weight=1)
@@ -202,9 +208,14 @@ class App():
 
         self.misc_container.grid_rowconfigure([2, 3, 5], weight=1)
 
-        self.core_size_input.insert(0, o.field_size)
-        self.max_cycle_input.insert(0, o.max_cycle_count)
-        self.max_length_input.insert(0, o.max_program_length)
+        self.setup_bottom_container.grid_rowconfigure(0, weight=1)
+        self.setup_bottom_container.grid_rowconfigure(1, weight=3)
+        self.setup_bottom_container.grid_columnconfigure([1, 3], weight=1)
+        self.setup_bottom_container.grid_columnconfigure([0, 2, 4], weight=3)
+
+        self.core_size_input.insert(0, o.match_options["field_size"])
+        self.max_cycle_input.insert(0, o.match_options["max_cycle_count"])
+        self.max_length_input.insert(0, o.match_options["max_program_length"])
 
         self.display_warriors()
 
@@ -223,13 +234,13 @@ class App():
             new_warrior.grid(row=i, column=0, sticky="nsew")
             i += 1
 
-    def apply_setup(self, core_size, max_cycles, max_length, random_core):
+    def validate_setup(self, core_size, max_cycles, max_length, random_core, saving=False):
         # Applies match settings using inputs
 
         # Error checking
         try:
             if random_core == 1:
-                core_size = randint(max_length * len(o.warriors), 20000)
+                core_size = randint(int(max_length) * len(o.warriors), 20000)
 
             core_size = int(core_size)
             max_cycles = int(max_cycles)
@@ -244,18 +255,40 @@ class App():
         if o.warriors_temp == []:
             self.error_label.configure(text="Cannot begin a match with no warriors in core")
             return
+
+        # Recompile and validate all warriors
+        for warrior in o.warriors_temp:
+            warrior, _error_list = compiler.compile_load_file(warrior.raw_data, True) # Should never error outside of assert failiures
+
+            if len(warrior.load_file) > max_length:
+                self.error_label.configure(text=f"Warrior {warrior.name} ({o.get_tile_color_from_id(warrior.id)}; {len(warrior.load_file)} lines) exceeds maximum length parameter")
+                return
+            
+            for expression in warrior.asserts:
+                try:
+                    if int(compiler.evaluate_attribute_list(expression, 1, 0)) != 1: raise Exception
+                except:
+                    self.error_label.configure(text=f"Warrior {warrior.name} ({o.get_tile_color_from_id(warrior.id)}): Assert '{expression}' failed")
         
         if core_size < max_length * len(o.warriors_temp):
             self.error_label.configure(text="Core size cannot be smaller than max. warrior length * warrior count")
             return
         
+        if not saving:
+            self.apply_setup(core_size, max_cycles, max_length)
+        else:
+            # Creates a TRSM file using match data
+            self.create_trsm_file(core_size, max_cycles, max_length, random_core)
+        
+    def apply_setup(self, core_size, max_cycles, max_length):
         # Save/reset data in preparation for match
         o.sim_completed = False
         o.cur_cycle = 0
 
-        o.field_size = core_size
-        o.max_cycle_count = max_cycles
-        o.max_program_length = max_length
+        o.match_options["field_size"] = core_size
+        o.match_options["max_cycle_count"] = max_cycles
+        o.match_options["max_program_length"] = max_length
+
 
         o.warriors = deepcopy(o.warriors_temp)
         o.initialize_core()
@@ -271,6 +304,81 @@ class App():
         self.one_step_button.configure(state=ctk.NORMAL)
         self.setup_window.destroy()
 
+    def create_trsm_file(self, core_size, max_cycles, max_length, random_core):
+        # Create a proprietary TRSM save file from the current match data
+        saved_match_data = {
+            "field_size": core_size,
+            "max_cycle_count": max_cycles,
+            "max_program_length": max_length,
+            "random_core": random_core
+        }
+
+        # TRSM file format: 0 - Header, 1 - match data dict, 2 - warrior data list
+        file_template = ["TAILWIND R.S. MATCH DATA", saved_match_data, list(warrior.__dict__ for warrior in o.warriors_temp)]
+        # Write data to the desired file
+        try:
+            save_path = asksaveasfilename(title="Save Setup Data", initialfile="setup.trsm", defaultextension="trsm", filetypes=[("Tailwind Match Data", ".trsm"), ("All files", "*")], confirmoverwrite=True)
+            with open(save_path, "w") as save_file:
+                # Recursively saves as JSON data
+                save_file.write(json.dumps(file_template, default=lambda o: getattr(o, '__dict__', str(o))))
+
+            self.apply_setup(core_size, max_cycles, max_length)
+        except:
+            if save_path == "": 
+                # Dismissing the popup returns an empty string; this prevents that error
+                return
+            showinfo("Export Error", "The settings could not be exported.\nIf the issue persists, please report this issue at indirect.uf@gmail.com.")
+            
+    def load_trsm_file(self):
+        try:
+            load_path = askopenfilename(title="Import Setup Data", filetypes=[("Tailwind Match Data", ".trsm"), ("All files", "*")])
+            with open(load_path) as load_file:
+                load_data = json.loads(load_file.read())
+
+        except:
+            if load_path == "":
+                return
+            else:
+                # Some other unknown loading error
+                error_text = ""
+                error_text += "The selected file could not be imported.\n"
+                error_text += "It may contain compiler errors, be corrupt,\n"
+                error_text += "or simply not contain a Tailwind R.S. match file."
+
+                showinfo("Import Error", error_text)
+                return
+
+        # Apply match data as required 
+        o.match_options = load_data[1]
+        if load_data[1]["random_core"] == 1:
+            self.random_button.select()
+        else:
+            self.random_button.deselect()
+            self.core_size_input.delete(0, len(self.core_size_input.get()))
+            self.core_size_input.insert(0, o.match_options["field_size"])
+            
+        self.max_cycle_input.delete(0, len(self.max_cycle_input.get()))
+        self.max_cycle_input.insert(0, o.match_options["max_cycle_count"])
+        self.max_length_input.delete(0, len(self.max_length_input.get()))
+        self.max_length_input.insert(0, o.match_options["max_program_length"])
+
+        # Reconstruct warriors from loaded JSON
+        o.warriors_temp = []
+        for warrior_data in load_data[2]:
+            new_warrior = o.Warrior(warrior_data["name"], warrior_data["id"], warrior_data["color"], warrior_data["raw_data"], [], warrior_data["asserts"])
+
+            for instruction_data in warrior_data["load_file"]:
+                new_instruction = o.Instruction(instruction_data["opcode"], instruction_data["modifier"], instruction_data["a_mode_1"], instruction_data["address_1"], instruction_data["a_mode_2"], instruction_data["address_2"])
+                new_warrior.load_file.append(new_instruction)
+
+            o.warriors_temp.append(new_warrior)
+
+        o.warriors = deepcopy(o.warriors_temp)
+
+        self.edit_warrior_button.configure(state=ctk.NORMAL)
+        self.remove_warrior_button.configure(state=ctk.NORMAL)
+        self.display_warriors()
+
     def import_load_file(self):
         # Loads warrior data stored in a .red file, selected by the user
         load_path = askopenfilename(title="Import Warrior", filetypes=[("Redcode '94 Load File", ".red"), ("All files", "*")])
@@ -282,10 +390,8 @@ class App():
                     load_data.append(line)
         except:
             if load_path == "":
-                # Dismissing the popup returns an empty string; this prevents that error
                 return
             else:
-                # Some other unknown loading error
                 error_text = ""
                 error_text += "The selected file could not be imported.\n"
                 error_text += "It may contain compiler errors, be corrupt,\n"
@@ -298,7 +404,7 @@ class App():
         load_data = "".join(load_data)
         load_data = load_data.split("\n")
         
-        self.open_redcode_window(o.Warrior(None, None, None, load_data, None))
+        self.open_redcode_window(o.Warrior(None, None, None, load_data, [], []))
 
     def open_redcode_window(self, warrior):
         self.redcode_window = ctk.CTkToplevel(o.root)
@@ -369,6 +475,12 @@ class App():
 
     # Creates a warrior from text data entered by user
     def compile_warrior(self, data, debug):
+        # Update default constants
+        try:
+            int(self.core_size_input.get())
+            compiler.default_constants["CORESIZE"] = self.core_size_input.get()
+        except: pass
+
         self.current_warrior, error_list = compiler.compile_load_file(data, debug)
         if error_list != []:
             # Errors are present
@@ -429,11 +541,12 @@ class App():
                 save_file.write("\n".join(write_data))
 
         except:
-            showinfo("Export Error", "The warrior could not be exported.\nIf the issue persists, please report this issue via Indirect UF contact channels.")
+            showinfo("Export Error", "The warrior could not be exported.\nIf the issue persists, please report this issue at indirect.uf@gmail.com.")
             return
 
     def delete_warrior(self, id):
         o.warriors_temp.pop(id)
+        self.current_selection.set(id - 1 if id - 1 > -1 else id)
         self.display_warriors()
         if o.warriors_temp == []:
             self.edit_warrior_button.configure(state=ctk.DISABLED)
@@ -479,7 +592,7 @@ class App():
         # If core is unloaded while window is open, close it
         if o.state_data == []: self.state_window.destroy()
 
-        o.state_image = graphics.create_image_from_state_data(o.state_data, o.prev_state_data, o.field_size, o.state_image)
+        o.state_image = graphics.create_image_from_state_data(o.state_data, o.prev_state_data, o.match_options["field_size"], o.state_image)
         o.resized_state_image = o.state_image.resize((800, round(o.state_image.height * (800 / o.state_image.width))))
         o.root.display_image = display_image = ImageTk.PhotoImage(o.resized_state_image)
         self.state_canvas.create_image((405, o.resized_state_image.height // 2 + 5), image=display_image)
@@ -494,7 +607,7 @@ class App():
         
         # Copy updates to the previous state data
         o.prev_state_data = deepcopy(o.state_data)
-        
+    
     def close_state_win(self):
         self.state_window_button.configure(state=ctk.NORMAL, text="View Core")
         self.state_window.destroy()
@@ -570,10 +683,10 @@ class App():
             except: return
 
         if target < 0:
-            self.update_detail_window(o.field_size + target, from_search)
+            self.update_detail_window(o.match_options["field_size"] + target, from_search)
             return
-        if target > o.field_size:
-            self.update_detail_window(target % o.field_size, from_search)
+        if target > o.match_options["field_size"]:
+            self.update_detail_window(target % o.match_options["field_size"], from_search)
             return
 
         for i in range(len(o.state_data)):
@@ -581,10 +694,10 @@ class App():
         
         self.detail_target = target
         for i in range(len(self.info_labels)):
-            target = (self.detail_target + i) % o.field_size
-            self.info_labels[i].configure(text=f" #{str(target).zfill(4 if o.field_size < 10000 else 5)}: {o.parse_instruction_to_text(o.state_data[target].instruction)}")
+            target = (self.detail_target + i) % o.match_options["field_size"]
+            self.info_labels[i].configure(text=f" #{str(target).zfill(4 if o.match_options["field_size"] < 10000 else 5)}: {o.parse_instruction_to_text(o.state_data[target].instruction)}")
             self.info_labels[i].configure(text_color=o.get_tile_hex_color(o.state_data[target].color) if o.state_data[target].color != "black" else "white")
-            self.info_labels[i].configure(font=("Consolas", 15))
+            self.info_labels[i].configure(font=("Consolas", 15), anchor="w")
             o.state_data[target].highlighted = True
 
         # Buttons need to be locked to prevent the insane race condition that I cannot trace
@@ -627,7 +740,7 @@ class App():
         if self.core_label is None or o.state_data == []: return
 
         core_text = ""
-        core_text += f"Cycle {o.cur_cycle:0{len(str(o.max_cycle_count))}}/{o.max_cycle_count}\n"
+        core_text += f"Cycle {o.cur_cycle:0{len(str(o.match_options["max_cycle_count"]))}}/{o.match_options["max_cycle_count"]}\n"
         if not o.sim_completed:
             core_text += f"Warriors Remaining: {len(o.warriors_temp)}"
         elif len(o.warriors_temp) == 1:

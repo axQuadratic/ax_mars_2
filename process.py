@@ -14,7 +14,7 @@ def simulation_clock(single_step : bool = False):
             # Simulation is running normally
             if o.max_speed_enabled:
                 # Immediately run the entire simulation
-                cycle_count = o.max_cycle_count - o.cur_cycle
+                cycle_count = o.match_options["max_cycle_count"] - o.cur_cycle
                 sleep(1)
             elif o.play_speed < 2:
                 sleep(1 / o.play_speed)
@@ -26,34 +26,38 @@ def simulation_clock(single_step : bool = False):
             if o.program_closing: break
             if o.paused or o.sim_completed: continue
 
-        if o.cur_cycle + cycle_count > o.max_cycle_count:
-            cycle_count = o.max_cycle_count - o.cur_cycle
+        if o.cur_cycle + cycle_count > o.match_options["max_cycle_count"]:
+            cycle_count = o.match_options["max_cycle_count"] - o.cur_cycle
 
         # Reset all read highlights in state data
         for i in range(len(o.state_data)):
             o.state_data[i].read_marked = False
 
-        for i in range(cycle_count):
+        for k in range(cycle_count):
             # Execute instructions as required; each warrior executes one
             for i in range(len(o.process_queue)):
-                o.state_data, o.process_queue[i] = execute_process(o.process_queue[i], o.state_data)
+                try:
+                    o.state_data, o.process_queue[i] = execute_process(o.process_queue[i], o.state_data)
 
-                if o.process_queue[i] == []:
-                    # Warrior has no remaining processes and is eliminated
-                    o.warriors_temp.pop(i)
-                    o.process_queue.pop(i)
-                    for tile in o.state_data:
-                        if tile.warrior != i: continue
-                        tile.color = "cross_" + tile.color
+                    if o.process_queue[i] == []:
+                        # Warrior has no remaining processes and is eliminated
+                        o.warriors_temp.pop(i)
+                        o.process_queue.pop(i)
+                        for tile in o.state_data:
+                            if tile.warrior != i: continue
+                            tile.color = "cross_" + tile.color.removeprefix("cross_")
 
-                    # Only one warrior remains, and is the winner
-                    if len(o.warriors_temp) == 1:
-                        o.sim_completed = True
+                        # Only one warrior remains, and is the winner
+                        if len(o.warriors_temp) == 1:
+                            o.sim_completed = True
+                
+                # Since it is not possible to change the range of an active for loop, simply ignore the excess
+                except IndexError: continue
 
         o.update_requested = True
         o.cur_cycle += cycle_count
 
-        if o.cur_cycle >= o.max_cycle_count:
+        if o.cur_cycle >= o.match_options["max_cycle_count"]:
             # End the simulation
             o.sim_completed = True
 
@@ -324,7 +328,7 @@ def evaluate_instruction(state : list, instruction : o.Instruction, cur_process 
                         check_passed = True
             if check_passed:
                 cur_process.location += 2
-                cur_process.location %= o.field_size
+                cur_process.location %= o.match_options["field_size"]
                 return state, new_processes
 
         case "SNE":
@@ -354,7 +358,7 @@ def evaluate_instruction(state : list, instruction : o.Instruction, cur_process 
                         check_passed = True
             if check_passed:
                 cur_process.location += 2
-                cur_process.location %= o.field_size
+                cur_process.location %= o.match_options["field_size"]
                 return state, new_processes
             
         case "SLT":
@@ -381,7 +385,7 @@ def evaluate_instruction(state : list, instruction : o.Instruction, cur_process 
                         check_passed = True
             if check_passed:
                 cur_process.location += 2
-                cur_process.location %= o.field_size
+                cur_process.location %= o.match_options["field_size"]
                 return state, new_processes
 
         case "NOP" | "_":
@@ -390,13 +394,13 @@ def evaluate_instruction(state : list, instruction : o.Instruction, cur_process 
 
     # Move the process forward one step
     cur_process.location += 1
-    cur_process.location %= o.field_size
+    cur_process.location %= o.match_options["field_size"]
         
     return state, new_processes
 
 def get_absolute_core_location(mode : str, value : int, origin : int):
     # Converts an addressing mode-value pair to an absolute value
-    next_location = (origin + value) % o.field_size
+    next_location = (origin + value) % o.match_options["field_size"]
 
     match mode:
         case "#":
