@@ -14,6 +14,7 @@ from time import sleep
 from pyperclip import copy
 from copy import deepcopy
 from os import listdir
+from datetime import datetime
 import graphics
 import options as o
 import compiler
@@ -41,6 +42,8 @@ class App():
         self.current_edit_id = None
         self.current_selection = ctk.IntVar(value=0)
 
+        self.detail_target = 0
+
         # Do initial setup based on user configuration
         self.load_user_config()
 
@@ -61,7 +64,7 @@ class App():
         self.speed_display = ctk.CTkLabel(self.bottom_container, text="1x", width=35)
         self.max_speed_button = ctk.CTkCheckBox(self.bottom_container, text="Max. Simulation Speed", command=lambda: self.change_speed("max"))
         self.pause_button = ctk.CTkButton(self.bottom_container, text="Start", command=self.toggle_pause, state=ctk.DISABLED)
-        self.one_step_button = ctk.CTkButton(self.bottom_container, text="Advance One Cycle", command=lambda: process.simulation_clock(True), state=ctk.DISABLED)
+        self.one_step_button = ctk.CTkButton(self.bottom_container, text="Advance One Cycle", command=self.advance_one_cycle, state=ctk.DISABLED)
 
         self.core_frame = ctk.CTkFrame(self.bottom_container, fg_color="black")
         self.core_label = ctk.CTkLabel(self.core_frame, text="No Core Loaded...", text_color="white", font=("Consolas", 12), anchor="w", justify="left")
@@ -127,12 +130,18 @@ class App():
         if o.paused:
             self.pause_button.configure(text="Pause")
             self.one_step_button.configure(state=ctk.DISABLED)
+            if self.detail_window is not None: self.close_detail_win() # Updating the detail window on the fly is simply too resource-intensive
             o.paused = False
         else:
             self.pause_button.configure(text="Unpause")
             self.one_step_button.configure(state=ctk.NORMAL)
             o.paused = True
             o.update_requested = True # Ensure rendering is caught up with state
+
+    def advance_one_cycle(self):
+        # Called when pressing the eponymous button; runs one cycle of the sim clock and updates the detail viewer
+        process.simulation_clock(True)
+        self.update_detail_window(self.detail_target, False)
 
     def open_setup_menu(self):
         if not o.paused: self.toggle_pause()
@@ -258,7 +267,8 @@ class App():
 
         # Recompile and validate all warriors
         for warrior in o.warriors_temp:
-            warrior, _error_list = compiler.compile_load_file(warrior.raw_data, True) # Should never error outside of assert failiures
+            recompiled_warrior, _error_list = compiler.compile_load_file(warrior.raw_data, False) # Compilation should never error if warrior was able to be saved once before
+            warrior.load_file = recompiled_warrior.load_file
 
             if len(warrior.load_file) > max_length:
                 self.error_label.configure(text=f"Warrior {warrior.name} ({o.get_tile_color_from_id(warrior.id)}; {len(warrior.load_file)} lines) exceeds maximum length parameter")
@@ -266,7 +276,7 @@ class App():
             
             for expression in warrior.asserts:
                 try:
-                    if int(compiler.evaluate_attribute_list(expression, 1, 0)) != 1: raise Exception
+                    if int(compiler.evaluate_attribute_list([expression], 0, 0)) != 1: raise Exception
                 except:
                     self.error_label.configure(text=f"Warrior {warrior.name} ({o.get_tile_color_from_id(warrior.id)}): Assert '{expression}' failed")
         
@@ -288,7 +298,6 @@ class App():
         o.match_options["field_size"] = core_size
         o.match_options["max_cycle_count"] = max_cycles
         o.match_options["max_program_length"] = max_length
-
 
         o.warriors = deepcopy(o.warriors_temp)
         o.initialize_core()
@@ -592,10 +601,12 @@ class App():
         # If core is unloaded while window is open, close it
         if o.state_data == []: self.state_window.destroy()
 
+        time = datetime.timestamp(datetime.now())
         o.state_image = graphics.create_image_from_state_data(o.state_data, o.prev_state_data, o.match_options["field_size"], o.state_image)
         o.resized_state_image = o.state_image.resize((800, round(o.state_image.height * (800 / o.state_image.width))))
         o.root.display_image = display_image = ImageTk.PhotoImage(o.resized_state_image)
         self.state_canvas.create_image((405, o.resized_state_image.height // 2 + 5), image=display_image)
+        print(datetime.timestamp(datetime.now()) - time)
 
         # The next step breaks if the Windows scaling setting is above 100%, hence that needs to be checked for
         scale_factor = windll.shcore.GetScaleFactorForDevice(0) / 100
@@ -615,11 +626,13 @@ class App():
     def open_detail_window(self):
         self.detail_target = 0
 
+        if not o.paused: self.toggle_pause()
+
         self.detail_button.configure(state=ctk.DISABLED, text="Detail Viewer Active")
 
         self.detail_window = ctk.CTkToplevel(o.root)
         self.detail_window.title("Core Details")
-        self.detail_window.geometry("300x320")
+        self.detail_window.geometry("300x320" if o.deghost_button_enabled else "300x300")
         self.detail_window.resizable(False, False)
         self.detail_window.after(201, lambda: self.detail_window.iconbitmap(f"assets/icons/icon_{o.user_config['selected_theme']}.ico"))
         self.detail_window.protocol("WM_DELETE_WINDOW", self.close_detail_win)
@@ -629,7 +642,6 @@ class App():
         self.search_value.trace_add("write", lambda _a, _b, _c: self.update_detail_window(self.search_value.get(), True))
         self.data_container = ctk.CTkFrame(self.detail_window, fg_color="black")
         self.options_container = ctk.CTkFrame(self.detail_window, width=30)
-        self.bottom_container = ctk.CTkFrame(self.detail_window)
 
         self.info_labels = []
         for i in range(10):
@@ -640,17 +652,14 @@ class App():
         self.down_one_button = ctk.CTkButton(self.options_container, text="↓", width=30, command=lambda: self.update_detail_window(self.detail_target + 1, False))
         self.down_ten_button = ctk.CTkButton(self.options_container, text="+10", width=30, command=lambda: self.update_detail_window(self.detail_target + 10, False))
 
-        self.refresh_button = ctk.CTkButton(self.bottom_container, text="Refresh", command=lambda: self.update_detail_window(self.detail_target, False))
-        self.deghost_button = ctk.CTkButton(self.bottom_container, text="Redraw Core", command=self.deghost)
+        self.deghost_button = ctk.CTkButton(self.detail_window, text="Redraw Core", command=self.deghost)
 
         self.search_bar.grid(row=0, column=0, columnspan=2, sticky="nsew")
         self.data_container.grid(row=1, column=0, sticky="nsew")
         self.options_container.grid(row=1, column=1, sticky="ns")
 
-        self.bottom_container.grid(row=2, column=0, columnspan=2, sticky="nsew")
-        self.refresh_button.grid(row=0, column=0, columnspan=2 if not o.deghost_button_enabled else 1, sticky="nsew")
         if o.deghost_button_enabled:
-            self.deghost_button.grid(row=0, column=1, sticky="nsew")
+            self.deghost_button.grid(row=2, column=0, sticky="nsew")
 
         for i in range(len(self.info_labels)):
             self.info_labels[i].grid(row=i, column=0, sticky="nsew")
@@ -668,12 +677,11 @@ class App():
         self.options_container.grid_rowconfigure([0, 1, 2, 3], weight=1)
         self.options_container.grid_columnconfigure(0, weight=1)
 
-        self.bottom_container.grid_rowconfigure(0, weight=1)
-        self.bottom_container.grid_columnconfigure([0, 1], weight=1)
-
         self.update_detail_window(self.detail_target, False)
 
     def update_detail_window(self, target, from_search):
+        if self.detail_window is None or not self.detail_window.winfo_exists(): return
+
         if not from_search:
             self.search_value.set("")
 
@@ -695,7 +703,7 @@ class App():
         self.detail_target = target
         for i in range(len(self.info_labels)):
             target = (self.detail_target + i) % o.match_options["field_size"]
-            self.info_labels[i].configure(text=f" #{str(target).zfill(4 if o.match_options["field_size"] < 10000 else 5)}: {o.parse_instruction_to_text(o.state_data[target].instruction)}")
+            self.info_labels[i].configure(text=f" #{str(target).zfill(4 if o.match_options["field_size"] < 10000 else 5)}: {o.parse_instruction_to_text(o.state_data[target].instruction)}{' [*]' if o.state_data[target].read_marked else ''}")
             self.info_labels[i].configure(text_color=o.get_tile_hex_color(o.state_data[target].color) if o.state_data[target].color != "black" else "white")
             self.info_labels[i].configure(font=("Consolas", 15), anchor="w")
             o.state_data[target].highlighted = True
@@ -709,13 +717,11 @@ class App():
         self.up_ten_button.configure(state=ctk.DISABLED, width=35)
         self.down_one_button.configure(state=ctk.DISABLED, width=35)
         self.down_ten_button.configure(state=ctk.DISABLED, width=35)
-        self.refresh_button.configure(state=ctk.DISABLED)
         sleep(0.01)
         self.up_one_button.configure(state=ctk.NORMAL, width=30)
         self.up_ten_button.configure(state=ctk.NORMAL, width=30)
         self.down_one_button.configure(state=ctk.NORMAL, width=30)
         self.down_ten_button.configure(state=ctk.NORMAL, width=30)
-        self.refresh_button.configure(state=ctk.NORMAL)
 
     def deghost(self):
         # Janky fix for ghost highlights problem on slower systems

@@ -12,15 +12,18 @@ tiles = {}
 
 def main():
     for color in o.tile_colors:
-        tiles[o.tile_colors(color).name] = pregenerate_tile(tile_size, border_width, color, False)    
-        tiles["cross_" + o.tile_colors(color).name] = pregenerate_tile(tile_size, border_width, color, True)
+        tiles[o.tile_colors(color).name] = pregenerate_tile(tile_size, border_width, color, False, False)    
+        tiles["cross_" + o.tile_colors(color).name] = pregenerate_tile(tile_size, border_width, color, True, False)
+        tiles["highlight_" + o.tile_colors(color).name] = pregenerate_tile(tile_size, border_width * 3, color, False, True)    
+        tiles["highlight_cross_" + o.tile_colors(color).name] = pregenerate_tile(tile_size, border_width, color, True, True)
+        
 
-def pregenerate_tile(tile_size, border_width, fill_color, cross):
+def pregenerate_tile(tile_size, border_width, fill_color, cross, highlight):
     data = []
     
     for j in range(border_width):
         for i in range(tile_size):
-            data.append((0, 0, 0))
+            data.append((0, 0, 0) if not highlight else (31, 83, 141)) # Highlighted tiles are given a thicker border in Tailwind Blue(TM)
 
     if cross:
         # This cross-drawing algorithm was developed by hand and is unbelievably janky
@@ -81,7 +84,7 @@ def pregenerate_tile(tile_size, border_width, fill_color, cross):
 
     for j in range(border_width):
         for i in range(tile_size):
-            data.append((0, 0, 0))
+            data.append((0, 0, 0) if not highlight else (31, 83, 141))
 
     return data
 
@@ -106,12 +109,12 @@ def create_image_from_state_data(state : list, prev_state : list, field_size : i
     for y in range(row_count):
         for x in range(a_max_field_width):
             # Determine the tile's colour
-            if state[current_tile].highlighted:
-                render_color = "highlight"
-            elif state[current_tile].read_marked:
+            if state[current_tile].read_marked:
                 render_color = "white"
             else:
                 render_color = state[current_tile].color
+            if state[current_tile].highlighted:
+                render_color = "highlight_" + render_color
 
             if prev_state == []:
                 # If no core was previously loaded, each tile must obviously be created from scratch

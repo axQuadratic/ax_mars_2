@@ -1,4 +1,6 @@
 __pycache__/*
 */__pycache__/*
+build/*
+dist/*
 tailwind.config
 main.spec

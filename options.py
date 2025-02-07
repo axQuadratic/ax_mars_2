@@ -17,7 +17,6 @@ class tile_colors(Enum):
     gray = (200, 200, 200)
     white = (255, 255, 255)
     black = (10, 10, 10)
-    highlight = (31, 83, 141)
 
 # RGB to hex algorithm straight from Stackoverflow
 def get_tile_hex_color(color : str):

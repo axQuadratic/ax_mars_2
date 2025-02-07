@@ -34,6 +34,8 @@ def simulation_clock(single_step : bool = False):
             o.state_data[i].read_marked = False
 
         for k in range(cycle_count):
+            if o.sim_completed: break
+
             # Execute instructions as required; each warrior executes one
             for i in range(len(o.process_queue)):
                 try:
@@ -54,8 +56,9 @@ def simulation_clock(single_step : bool = False):
                 # Since it is not possible to change the range of an active for loop, simply ignore the excess
                 except IndexError: continue
 
+            o.cur_cycle += 1
+
         o.update_requested = True
-        o.cur_cycle += cycle_count
 
         if o.cur_cycle >= o.match_options["max_cycle_count"]:
             # End the simulation
@@ -70,9 +73,11 @@ def execute_process(queue : list, state : list):
 
     process = queue.pop(0)
 
-    # Apply read marker to the currently targeted instruction
-    state[process.location].warrior = process.warrior
-    state[process.location].color = o.get_tile_color_from_id(process.warrior)
+    if state[process.location].instruction.opcode != "DAT" or state[process.location].warrior is None:
+        # Apply read marker to the currently targeted instruction
+        state[process.location].warrior = process.warrior
+        state[process.location].color = o.get_tile_color_from_id(process.warrior)
+        
     # Add read highlight to new process location unless max speed is enabled
     if not o.max_speed_enabled: state[process.location].read_marked = True
 
