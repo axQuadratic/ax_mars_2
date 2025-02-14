@@ -1,0 +1,169 @@
+# # # # # # # # # # # # # # # # # #
+# TAILWIND REDCODE SIMULATOR v1.0 #
+#    Redcode '94 Documentation    #
+# # # # # # # # # # # # # # # # # #
+
+===============================
+HOW REDCODE WORKS / TERMINOLOGY
+===============================
+
+Redcode is an assembly-based programming language. Each "warrior" (Redcode program) initially consists of
+one process pointer, which executes the instruction at its location each "cycle" (turn).
+The warrior whose process(es) are the last remaining in the "core" (playfield) is the winner.
+
+A typical Redcode instruction takes the form of
+"<opcode>.<addressing mode> <source modifier><source address pointer>, <destination modifier><destination address pointer>";
+for instance: MOV.I $0, $1. This instruction copies (MOV) the entire instruction (I)
+at the source address ($0, meaning current location), to the destination address ($1, instruction 1 tile ahead).
+
+=== LABELS AND CONSTANTS ===
+In the Tailwind Redcode Compiler, a form of variables may be defined using the LABEL and CONSTANT system.
+Constants are defined using the format "<name> equ <integer value>". For instance, "const equ 5"
+will allow further instructions to use the format "add #2, const",
+which at compile-time will evaluate to ADD.AB #2, $5.
+Labels are instead a form of reference to a location in the warrior, and are declared using a prefix.
+For instance, the following Redcode
+ptr mov 2, }2
+jmp ptr
+dat 0, 1
+
+will compile to
+MOV.I $2, }2
+JMP.B $-1, $0
+DAT.F $0, $1
+
+=== FOR-LOOPS ===
+For-loops may be defined in Redcode using the format "for <repeats>", and terminated using the "rof" keyword.
+This simply repeats all instructions inside the loop the specified number of times.
+For instance:
+for 5
+add #3, target
+rof
+target dat
+
+will evaluate to
+ADD.AB #3, $5
+ADD.AB #3, $4
+ADD.AB #3, $3
+ADD.AB #3, $2
+ADD.AB #3, $1
+DAT.F $0, $0
+
+===========================
+THE REDCODE INSTRUCTION SET
+===========================
+
+=== MOV ===
+Copies the data at the source address to the destination address.
+
+=== DAT ===
+Immediately kills the executing process.
+At the start of a match, the core is filled with the instruction DAT.F $0, $0.
+
+=== ADD ===
+Adds the value of the source address to the destination address.
+
+=== SUB ===
+Subtracts the value of the source address from the destination address.
+
+=== MUL ===
+Multiplies the source and destination addresses, writing the result to the destination address.
+
+=== DIV, MOD ===
+Performs a division or modulo operation,
+using the destination address as numerator and source address as denominator.
+Note that division or modulo by zero immediately kills the process.
+
+=== JMP ===
+Moves execution to the location specified by the source address.
+
+=== JMZ ===
+Moves execution to the location specified by the source address
+if the value at the destination address is equal to zero.
+JMZ.F/X/I requires BOTH tested values to be zero in order to succeed.
+
+=== JMN ===
+Moves execution to the location specified by the source address
+if the value at the destination address is NOT equal to zero.
+JMN.F/X/I requires EITHER tested value to be nonzero in order to succeed.
+
+=== DJN ===
+Decrements the value at the destination address, then
+moves execution to the location specified by the source address
+if the decremented value is NOT equal to zero.
+DJN.F/X/I decrements BOTH tested values, and requires EITHER to be nonzero in order to succeed.
+
+=== SPL ===
+Creates a new process at the location specified by the source address.
+When multiple processes are present in a program, they take turns
+performing execution during each cycle.
+
+=== SEQ, CMP ===
+Compares the data at the source and destination addresses, and
+moves execution exactly TWO instructions forward if they are equal.
+SEQ.F/X/I requires ALL tested values to be equal in order to succeed.
+CMP is identical to SEQ, and the two may be used interchangably.
+
+=== SNE ===
+Compares the data at the source and destination addresses, and
+moves execution exactly TWO instructions forward if they are NOT equal.
+SNE.F/X/I requires ANY tested value to be non-equal in order to succeed.
+
+=== SLT ===
+Compares the data at the source and destination addresses, and
+moves execution exactly TWO instructions forward if the first is LOWER than the second.
+SLT.F/X/I succeeds if ANY comparison succeeds.
+
+=== NOP ===
+Exceution is skipped this cycle.
+
+========================
+REDCODE ADDRESSING MODES
+========================
+
+=== $ (RELATIVE) ===
+Defines a pointer. $0 is the current instruction, $1 is the instruction one ahead, etc.
+When interpreted as a number, will use the value at the address it is pointing to.
+
+=== # (IMMEDIATE) ===
+Defines a raw number for arithmetic operations.
+When interpreted as a pointer, it will always point to the current instruction (equivalent to $0).
+
+=== * (INDIRECT A-FIELD) ===
+Uses the value itself pointed to by the pointer at the source address itself pointed to by this instruction.
+For instance, in the following Redcode:
+ADD.AB *1, $1
+DAT.F $1, $0
+MOV.AB #3, $-2
+the pointer *1 will point to the number #3 in the MOV.AB instruction.
+
+=== @ (INDIRECT B-FIELD) ===
+Identical to the * mode, however points to a destination address instead of a source address
+
+=== {, <, >, } (INDIRECT A/B-FIELD WITH PREDECREMENT/POSTINCREMENT) ===
+These work identically to * and @, however the value pointed to will be decremented or incremented alongside the other operation.
+
+=================
+REDCODE MODIFIERS
+=================
+
+=== .A ===
+The source and destination addresses point to the source addresses at their respective locations.
+
+=== .B ===
+The source and destination addresses point to the destination addresses at their respective locations.
+
+=== .AB ===
+The source address points to the source address, the destination address points to the destination address.
+
+=== .BA ===
+The source address points to the destination address, the destination address points to the source address.
+
+=== .F ===
+The source and destination addresses point to BOTH addresses at their respective locations.
+
+=== .X ===
+The source address points to BOTH addresses, the destination address points to both addresses IN THE OPPOSITE ORDER.
+
+=== .I ===
+The source and destination addresses point to the ENTIRE INSTRUCTIONS at their respective locations.

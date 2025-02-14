@@ -1,5 +1,5 @@
 # The main program file; acts primarily as UI manager
-print("Log active, launching Tailwind v0.8...")
+print("Launching Tailwind v1.0...")
 
 import customtkinter as ctk
 from tkinter.messagebox import showinfo
@@ -7,6 +7,7 @@ from tkinter.filedialog import asksaveasfilename, askopenfilename
 import math
 import threading as th
 import json
+import webbrowser
 from PIL import ImageTk
 from ctypes import windll
 from random import randint
@@ -24,7 +25,7 @@ import process
 
 o.root.geometry("450x200")
 o.root.resizable(False, False)
-o.root.title("Tailwind v0.8")
+o.root.title("Tailwind v1.0")
 o.root.protocol("WM_DELETE_WINDOW", o.close_all_threads)
 
 # Create the main UI class
@@ -56,7 +57,7 @@ class App():
         self.top_container = ctk.CTkFrame(o.root)
         self.state_window_button = ctk.CTkButton(self.top_container, text="View Core", command=self.open_state_window, state=ctk.DISABLED)
         self.setup_button = ctk.CTkButton(self.top_container, text="Setup", command=self.open_setup_menu)
-        self.help_button = ctk.CTkButton(self.top_container, text="Help [WIP]", state=ctk.DISABLED)
+        self.help_button = ctk.CTkButton(self.top_container, text="Help", command=lambda: webbrowser.open("docs.txt"))
         self.options_button = ctk.CTkButton(self.top_container, text="Options", command=self.open_options_menu)
 
         self.bottom_container = ctk.CTkFrame(o.root)
@@ -266,6 +267,7 @@ class App():
             return
 
         # Recompile and validate all warriors
+        compiler.default_constants["CORESIZE"] = str(core_size)
         for warrior in o.warriors_temp:
             recompiled_warrior, _error_list = compiler.compile_load_file(warrior.raw_data, False) # Compilation should never error if warrior was able to be saved once before
             warrior.load_file = recompiled_warrior.load_file
@@ -276,9 +278,10 @@ class App():
             
             for expression in warrior.asserts:
                 try:
-                    if int(compiler.evaluate_attribute_list([expression], 0, 0)) != 1: raise Exception
+                    if int(compiler.evaluate_attribute_list([expression], 0, 0)[0]) != 1: raise Exception
                 except:
                     self.error_label.configure(text=f"Warrior {warrior.name} ({o.get_tile_color_from_id(warrior.id)}): Assert '{expression}' failed")
+                    return
         
         if core_size < max_length * len(o.warriors_temp):
             self.error_label.configure(text="Core size cannot be smaller than max. warrior length * warrior count")
@@ -606,7 +609,6 @@ class App():
         o.resized_state_image = o.state_image.resize((800, round(o.state_image.height * (800 / o.state_image.width))))
         o.root.display_image = display_image = ImageTk.PhotoImage(o.resized_state_image)
         self.state_canvas.create_image((405, o.resized_state_image.height // 2 + 5), image=display_image)
-        print(datetime.timestamp(datetime.now()) - time)
 
         # The next step breaks if the Windows scaling setting is above 100%, hence that needs to be checked for
         scale_factor = windll.shcore.GetScaleFactorForDevice(0) / 100

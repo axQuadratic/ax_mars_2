@@ -469,6 +469,9 @@ def evaluate_complex_expression(attributes : list, target : int, current_line : 
     expression = expression.replace("||", " or ")
     expression = expression.replace("!", "not ")
 
+    # This is dumb and a vulnerability, but I see no better way to map this in case of asserts
+    expression = expression.replace("CORESIZE", default_constants["CORESIZE"])
+
     # Evaluate and return the modified attribute list
     try:
         attributes[target] = int(eval(expression))
